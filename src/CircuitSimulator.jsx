@@ -366,7 +366,11 @@ const GATES = {
       if (width === 1) {
         return { w: 36, h: 40, inputs: [{ name: 'in0', x: 0, y: 20, width: 1 }], outputs: [] };
       }
-      return { w: 70, h: 40, inputs: [{ name: 'in0', x: 0, y: 20, width }], outputs: [] };
+      // Mode bus : rangée de N cellules (visuel identique à l'entrée), port à gauche.
+      const cellSize = INPUT_BUS_CELL_SIZE;
+      const w = width * cellSize + 8;
+      const h = 52;
+      return { w, h, inputs: [{ name: 'in0', x: 0, y: h / 2, width }], outputs: [] };
     },
     shape: (comp, _outputValue, inputValue, _ibn, angle) => {
       const width = comp?.state?.width ?? 1;
@@ -389,32 +393,55 @@ const GATES = {
           </>
         );
       }
-      const base = comp?.state?.base ?? 'dec';
-      const display = formatValue(v, width, base);
-      const prefix = base === 'bin' ? '0b' : base === 'hex' ? '0x' : '';
-      const anyBit = v !== 0;
+      // Mode bus : une rangée de N cellules en lecture seule (un bit par cellule),
+      // visuel identique à l'entrée mais en couleur de sortie. Pas de dec/hex/bin.
+      const cellSize = INPUT_BUS_CELL_SIZE;
+      const totalW = width * cellSize;
+      const h = 52;
+      const cellY = 12;
+      const cellH = h - 18;
+      const offX = 8; // décalage pour le stub d'entrée à gauche
+      const cells = [];
+      for (let i = 0; i < width; i++) {
+        const bitIdx = width - 1 - i; // MSB à gauche
+        const bit = (v >> bitIdx) & 1;
+        const x0 = offX + i * cellSize;
+        const cx = x0 + cellSize / 2;
+        const cy = cellY + cellH / 2;
+        cells.push(
+          <path key={`r${i}`}
+                d={roundedRectPath(x0, cellY, cellSize, cellH, 3, {
+                  tl: i === 0, bl: i === 0,
+                  tr: i === width - 1, br: i === width - 1,
+                })}
+                fill={bit ? 'var(--output-on, #f97316)' : 'white'}
+                stroke="#1f2937" strokeWidth={0.8} />
+        );
+        cells.push(
+          <text key={`t${i}`}
+                x={cx} y={cy + 5}
+                textAnchor="middle"
+                fontSize={cellSize >= 18 ? 14 : 11}
+                fontWeight="700"
+                fontFamily="'IBM Plex Mono', monospace"
+                fill={bit ? '#1a2e05' : '#94a3b8'}
+                transform={uprightTransform(angle, cx, cy)}
+                style={{ userSelect: 'none', pointerEvents: 'none' }}>
+            {bit}
+          </text>
+        );
+      }
       return (
         <>
-          <line x1="0" y1="20" x2="5" y2="20" />
-          <rect x="5" y="0" width="65" height="40" rx="2"
-                fill={anyBit ? 'var(--output-on, #f97316)' : 'white'}
-                stroke="#1f2937" />
-          <text x="37.5" y="22" textAnchor="middle"
-                fontSize="11" fontWeight="700"
-                fontFamily="'IBM Plex Mono', monospace"
-                fill={anyBit ? '#1a2e05' : '#94a3b8'}
-                transform={uprightTransform(angle, 37.5, 20)}
+          {cells}
+          <text x={offX + totalW / 2} y={8} textAnchor="middle"
+                fontSize="9" fontWeight="600"
+                fontFamily="'IBM Plex Mono', monospace" fill="#475569"
+                transform={uprightTransform(angle, offX + totalW / 2, 8)}
                 style={{ userSelect: 'none', pointerEvents: 'none' }}>
-            {prefix + display}
+            MSB ··· LSB · /{width}
           </text>
-          <text x="37.5" y="34" textAnchor="middle"
-                fontSize="8"
-                fontFamily="'IBM Plex Mono', monospace"
-                fill={anyBit ? '#ffe9d6' : '#94a3b8'}
-                transform={uprightTransform(angle, 37.5, 32)}
-                style={{ userSelect: 'none', pointerEvents: 'none' }}>
-            /{width}
-          </text>
+          <line x1="0" y1={h / 2} x2={offX} y2={h / 2} />
         </>
       );
     },
@@ -2413,7 +2440,6 @@ function PropertiesPanel({ circuit, selection, onUpdate, sim }) {
     const isLedMatrix = comp.type === 'LEDMATRIX';
     const isClock = comp.type === 'CLOCK';
     const currentWidth = comp.state?.width ?? (def.defaultState?.width ?? 1);
-    const currentBase = comp.state?.base ?? 'dec';
 
     const orientation = comp.state?.orientation ?? 'right';
     const ORIENTATIONS = [
@@ -2984,27 +3010,6 @@ function PropertiesPanel({ circuit, selection, onUpdate, sim }) {
                 ? `Auto-bascule à ${comp.state?.freq ?? 1} cycles/s.`
                 : 'Clic sur le composant ou bouton « Tick » pour basculer.'}
             </p>
-          </div>
-        )}
-
-        {comp.type === 'OUTPUT' && currentWidth > 1 && (
-          <div>
-            <label className="text-stone-500 block mb-1">Affichage</label>
-            <div className="flex gap-1">
-              {['dec', 'hex', 'bin'].map((b) => (
-                <button
-                  key={b}
-                  onClick={() => onUpdate(id, { state: { ...(comp.state ?? {}), base: b } })}
-                  className={`flex-1 px-2 py-1 text-xs rounded border ${
-                    currentBase === b
-                      ? 'bg-stone-800 text-white border-stone-800'
-                      : 'bg-white text-stone-700 border-stone-300 hover:bg-stone-50'
-                  }`}
-                >
-                  {b === 'dec' ? 'Déc' : b === 'hex' ? 'Hex' : 'Bin'}
-                </button>
-              ))}
-            </div>
           </div>
         )}
 
