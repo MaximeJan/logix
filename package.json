@@ -2,6 +2,8 @@
   "name": "circuit-simulator",
   "private": true,
   "version": "0.5.0",
+  "author": "Maxime Jan",
+  "license": "CC-BY-NC-4.0",
   "type": "module",
   "description": "Simulateur de circuits logiques pour cours d'OC informatique (gymnase)",
   "scripts": {

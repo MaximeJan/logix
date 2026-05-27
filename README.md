@@ -47,7 +47,12 @@ Phases terminées :
 - Table de vérité automatique
 - Apparence personnalisable (couleurs, épaisseurs, grille)
 
-À venir : SR latch, JK / T flip-flop, RAM, petit processeur pédagogique.
+- SR latch, registre N-bit avec chargement conditionnel, compteur N-bit
+- RAM configurable (1–8 bits d'adresse, 1–16 bits par mot), édition cellule par cellule
+- Chronogramme en temps réel
+- Afficheur 7 segments, matrice LED
+
+À venir : petit processeur pédagogique (PC, ALU, mémoire, jeu d'instructions minimal).
 
 ## Test logique rapide
 
@@ -59,6 +64,12 @@ npm run parse-check
 
 Pour tester la logique pure (sans React), extraire les fonctions dans un fichier `.mjs` et lancer avec `node`.
 
+## Déploiement GitHub Pages
+
+Le projet se déploie automatiquement sur GitHub Pages à chaque push sur `main` via le workflow `.github/workflows/deploy.yml`. La base URL est détectée automatiquement depuis le nom du dépôt.
+
 ## Licence
 
-Projet pédagogique, libre d'usage pour l'éducation.
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — © 2026 Maxime Jan
+
+Utilisation et adaptation libres à condition de **citer l'auteur**. Usage commercial interdit.
