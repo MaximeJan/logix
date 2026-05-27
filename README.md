@@ -1,4 +1,4 @@
-# Circuit Simulator
+# Logix
 
 Simulateur de circuits logiques pour le cours d'OC informatique au gymnase. App web React, aucune installation côté élève.
 
