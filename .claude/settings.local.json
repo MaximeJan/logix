@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/CircuitSimulator.jsx','utf8'\\), {sourceType:'module', plugins:['jsx']}\\); console.log\\('OK'\\)\")",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/CircuitSimulator.jsx','utf8'\\), {sourceType:'module', plugins:['jsx']}\\)\")",
+      "PowerShell(\\(Get-Content \"c:\\\\Users\\\\maxim\\\\OneDrive - EDUETATFR\\\\Projets\\\\circuit-simulator\\\\src\\\\CircuitSimulator.jsx\" | Measure-Object -Line\\).Lines)",
+      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/challenges.js','utf8'\\), {sourceType:'module'}\\)\")"
+    ]
+  }
+}

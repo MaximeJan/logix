@@ -1,0 +1,29 @@
+{
+  "name": "circuit-simulator",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "description": "Simulateur de circuits logiques pour cours d'OC informatique (gymnase)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "parse-check": "node -e \"require('@babel/parser').parse(require('fs').readFileSync('src/CircuitSimulator.jsx','utf8'), {sourceType:'module', plugins:['jsx']}); console.log('OK')\"",
+    "test": "node tests/run.mjs",
+    "test:coverage": "c8 --include=src/sim.js --include=src/persist.js --reporter=text --reporter=html node tests/run.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.456.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@babel/parser": "^7.26.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "c8": "^11.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "vite": "^5.4.11"
+  }
+}
