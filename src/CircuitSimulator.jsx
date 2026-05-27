@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Save, Upload, Undo2, Redo2, Trash2, Copy, ClipboardPaste, Table2, Power, Package, Check, X, Plus, Activity } from 'lucide-react';
+import { Save, Upload, Undo2, Redo2, Trash2, Copy, ClipboardPaste, Table2, Power, Package, Check, X, Plus, Activity, Zap, GitBranch, Timer, Cpu, Trophy } from 'lucide-react';
 import {
   asInt,
   maskTo,
@@ -16,7 +16,7 @@ import {
   serializeAll as serializeAllCore,
   deserializeAll as deserializeAllCore,
 } from './persist.js';
-import { CHAPTERS, getLevel, getAllLevels, getDefaultUnlockedLevels } from './challenges.js';
+import { CHAPTERS, getLevel, getAllLevels } from './challenges.js';
 
 // ============================================================
 // CONSTANTES
@@ -26,7 +26,6 @@ const PORT_R = 3.5;
 // FORMAT_VERSION est désormais exporté depuis ./persist.js (réimporté en haut)
 const STORAGE_KEY = 'circuit:autosave';
 const PREFS_STORAGE_KEY = 'circuit:prefs';
-const CHALLENGES_STORAGE_KEY = 'circuit:challenges';
 
 // Adaptateur de stockage : utilise window.storage (Tauri/Electron) si disponible,
 // sinon localStorage standard (navigateur web / GitHub Pages).
@@ -667,6 +666,130 @@ const GATES = {
       );
     },
   },
+  SPLITTER: {
+    label: 'Séparateur',
+    category: 'Bus',
+    w: 80, h: 124,
+    inputs: [],
+    outputs: [],
+    // width = largeur du bus d'entrée ; produit `width` sorties 1-bit.
+    // b0 = bit de poids faible (LSB), affiché en bas ; MSB en haut (extérieur).
+    defaultState: { width: 4 },
+    getDynamicGeometry: (comp) => {
+      const n = comp?.state?.width ?? 4;
+      const h = Math.max(76, n * 24 + 28);
+      const outputs = [];
+      for (let i = 0; i < n; i++) {
+        const bit = n - 1 - i;            // haut = MSB
+        outputs.push({ name: `b${bit}`, x: 80, y: 22 + i * 24, width: 1 });
+      }
+      return {
+        w: 80, h,
+        inputs: [{ name: 'in', x: 0, y: h / 2, width: n }],
+        outputs,
+      };
+    },
+    shape: (comp, _o, inputValue, _ibn, angle) => {
+      const n = comp?.state?.width ?? 4;
+      const W = 80;
+      const h = Math.max(76, n * 24 + 28);
+      const busVal = maskTo(n, asInt(inputValue));
+      const accent = 'var(--lcd-text, #fbbf24)';
+      const stubs = [];
+      const labels = [];
+      for (let i = 0; i < n; i++) {
+        const bit = n - 1 - i;
+        const y = 22 + i * 24;
+        const on = (busVal >> bit) & 1;
+        stubs.push(<line key={`ol${i}`} x1={W - 14} y1={y} x2={W} y2={y} strokeWidth="1.2" />);
+        stubs.push(<circle key={`op${i}`} cx={W} cy={y} r="3" fill={on ? accent : '#1f2937'} stroke="#1f2937" strokeWidth="1" />);
+        labels.push({ bit, y, on });
+      }
+      return (
+        <>
+          {stubs}
+          <line x1="0" y1={h / 2} x2="14" y2={h / 2} strokeWidth="1.2" />
+          <circle cx="2.5" cy={h / 2} r="2.5" fill="white" strokeWidth="1.2" />
+          <rect x="14" y="10" width={W - 28} height={h - 20} fill="white" stroke="#0f172a" strokeWidth="2" />
+          <g stroke="none">
+            {labels.map(({ bit, y, on }) => (
+              <text key={`ot${bit}`} x={W - 20} y={y + 4} fontSize="12" textAnchor="end"
+                    fontWeight={on ? '700' : '600'} fontFamily="'IBM Plex Mono', monospace"
+                    fill={on ? '#1f2937' : '#475569'}
+                    transform={uprightTransform(angle, W - 24, y)}
+                    style={{ userSelect: 'none', pointerEvents: 'none' }}>{bit}</text>
+            ))}
+            <text x="20" y={h / 2 + 1} fontSize="11" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, 24, h / 2)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>in</text>
+          </g>
+        </>
+      );
+    },
+  },
+  MERGER: {
+    label: 'Fusionneur',
+    category: 'Bus',
+    w: 80, h: 124,
+    inputs: [],
+    outputs: [],
+    // width = largeur du bus de sortie ; agrège `width` entrées 1-bit.
+    // b0 = LSB (en bas), MSB en haut (extérieur).
+    defaultState: { width: 4 },
+    getDynamicGeometry: (comp) => {
+      const n = comp?.state?.width ?? 4;
+      const h = Math.max(76, n * 24 + 28);
+      const inputs = [];
+      for (let i = 0; i < n; i++) {
+        const bit = n - 1 - i;
+        inputs.push({ name: `b${bit}`, x: 0, y: 22 + i * 24, width: 1 });
+      }
+      return {
+        w: 80, h,
+        inputs,
+        outputs: [{ name: 'out', x: 80, y: h / 2, width: n }],
+      };
+    },
+    shape: (comp, outputValue, _i, inputsByName, angle) => {
+      const n = comp?.state?.width ?? 4;
+      const W = 80;
+      const h = Math.max(76, n * 24 + 28);
+      const outVal = maskTo(n, asInt(outputValue));
+      const accent = 'var(--lcd-text, #fbbf24)';
+      const stubs = [];
+      const labels = [];
+      for (let i = 0; i < n; i++) {
+        const bit = n - 1 - i;
+        const y = 22 + i * 24;
+        const on = asInt(inputsByName?.[`b${bit}`] ?? 0) & 1;
+        stubs.push(<line key={`il${i}`} x1="0" y1={y} x2="14" y2={y} strokeWidth="1.2" />);
+        stubs.push(<circle key={`ic${i}`} cx="2.5" cy={y} r="2.5" fill={on ? accent : 'white'} strokeWidth="1.2" />);
+        labels.push({ bit, y, on });
+      }
+      return (
+        <>
+          {stubs}
+          <line x1={W - 14} y1={h / 2} x2={W} y2={h / 2} strokeWidth="1.2" />
+          <circle cx={W} cy={h / 2} r="3" fill={outVal ? accent : '#1f2937'} stroke="#1f2937" strokeWidth="1" />
+          <rect x="14" y="10" width={W - 28} height={h - 20} fill="white" stroke="#0f172a" strokeWidth="2" />
+          <g stroke="none">
+            {labels.map(({ bit, y, on }) => (
+              <text key={`it${bit}`} x="20" y={y + 4} fontSize="12"
+                    fontWeight={on ? '700' : '600'} fontFamily="'IBM Plex Mono', monospace"
+                    fill={on ? '#1f2937' : '#475569'}
+                    transform={uprightTransform(angle, 24, y)}
+                    style={{ userSelect: 'none', pointerEvents: 'none' }}>{bit}</text>
+            ))}
+            <text x={W - 20} y={h / 2 + 1} textAnchor="end" fontSize="11" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, W - 24, h / 2)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>out</text>
+          </g>
+        </>
+      );
+    },
+  },
   SRLATCH: {
     label: 'Latch SR',
     category: 'Séquentiel',
@@ -994,6 +1117,103 @@ const GATES = {
                   transform={uprightTransform(angle, lcdX + lcdW / 2, lcdY + lcdH / 2)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>
               {width === 1 ? String(q) : formatBitsGrouped(q, width)}
+            </text>
+          </g>
+        </>
+      );
+    },
+  },
+  ADDER: {
+    label: 'Additionneur',
+    category: 'Arithmétique',
+    w: 140, h: 92,  // recalculé dynamiquement
+    inputs: [],
+    outputs: [],
+    // width : largeur 1..32. Composant purement combinatoire :
+    // S = (A + B + Cin) mod 2^width, Cout = retenue sortante.
+    defaultState: { width: 4 },
+    getDynamicGeometry: (comp) => {
+      const width = comp?.state?.width ?? 4;
+      const w = widthForBits(width, { minW: 148, portMargin: 36 });
+      const h = 92;
+      return {
+        w, h,
+        inputs: [
+          { name: 'A',   x: 0, y: 22, width },
+          { name: 'B',   x: 0, y: 46, width },
+          { name: 'Cin', x: 0, y: 70, width: 1 },
+        ],
+        outputs: [
+          { name: 'S',    x: w, y: 34, width },
+          { name: 'Cout', x: w, y: 62, width: 1 },
+        ],
+      };
+    },
+    shape: (comp, outputValue, _i, _ibn, angle) => {
+      const width = comp?.state?.width ?? 4;
+      const s = maskTo(width, asInt(outputValue));
+      const w = widthForBits(width, { minW: 148, portMargin: 36 });
+      const h = 92;
+      const lcdH = 26;
+      const lcdY = (h - lcdH) / 2;
+      const lcdX = 64, lcdW = w - 84;
+      return (
+        <>
+          {/* Stubs entrées */}
+          <line x1="0" y1="22" x2="14" y2="22" strokeWidth="1.2" />
+          <line x1="0" y1="46" x2="14" y2="46" strokeWidth="1.2" />
+          <line x1="0" y1="70" x2="14" y2="70" strokeWidth="1.2" />
+          {/* Stubs sorties */}
+          <line x1={w - 14} y1="34" x2={w} y2="34" strokeWidth="1.2" />
+          <line x1={w - 14} y1="62" x2={w} y2="62" strokeWidth="1.2" />
+          {/* Cercles aux entrées */}
+          <circle cx="2.5" cy="22" r="2.5" fill="white" strokeWidth="1.2" />
+          <circle cx="2.5" cy="46" r="2.5" fill="white" strokeWidth="1.2" />
+          <circle cx="2.5" cy="70" r="2.5" fill="white" strokeWidth="1.2" />
+          {/* Disques aux sorties */}
+          <circle cx={w - 2.5} cy="34" r="3"
+                  fill={s ? 'var(--lcd-text, #fbbf24)' : '#1f2937'}
+                  stroke="#1f2937" strokeWidth="1" />
+          <circle cx={w - 2.5} cy="62" r="3" fill="#1f2937" stroke="#1f2937" strokeWidth="1" />
+          {/* Boîtier */}
+          <rect x="14" y="10" width={w - 28} height={h - 20}
+                fill="white" stroke="#0f172a" strokeWidth="2" />
+          {/* Cadre LED */}
+          <rect x={lcdX} y={lcdY} width={lcdW} height={lcdH} rx="2"
+                fill="var(--lcd-fill, #0f172a)" stroke="var(--lcd-border, #0f172a)" strokeWidth="1" />
+          <g stroke="none">
+            <text x="20" y="27" fontSize="14" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, 20, 22)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>A</text>
+            <text x="20" y="51" fontSize="14" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, 20, 46)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>B</text>
+            <text x="20" y="74" fontSize="11" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, 20, 70)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>Cin</text>
+            {/* Gros symbole + */}
+            <text x={lcdX - 12} y={h / 2 + 6} textAnchor="middle" fontSize="20" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, lcdX - 12, h / 2)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>+</text>
+            <text x={w - 20} y="39" textAnchor="end" fontSize="14" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, w - 20, 34)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>S</text>
+            <text x={w - 20} y="66" textAnchor="end" fontSize="11" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, w - 20, 62)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>Cout</text>
+            <text x={lcdX + lcdW / 2} y={lcdY + lcdH / 2 + 5} textAnchor="middle"
+                  fontSize={width === 1 ? 18 : 13} fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace"
+                  fill="var(--lcd-text, #fbbf24)"
+                  transform={uprightTransform(angle, lcdX + lcdW / 2, lcdY + lcdH / 2)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>
+              {width === 1 ? String(s) : formatBitsGrouped(s, width)}
             </text>
           </g>
         </>
@@ -1410,7 +1630,7 @@ const GATES = {
   },
 };
 
-const PALETTE_ORDER = ['INPUT', 'OUTPUT', 'SEG7', 'LEDMATRIX', 'AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'MUX', 'DEMUX', 'DECODER', 'SRLATCH', 'DFF', 'REG', 'COUNTER', 'RAM', 'CLOCK'];
+const PALETTE_ORDER = ['INPUT', 'OUTPUT', 'SEG7', 'LEDMATRIX', 'AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'MUX', 'DEMUX', 'DECODER', 'SPLITTER', 'MERGER', 'ADDER', 'SRLATCH', 'DFF', 'REG', 'COUNTER', 'RAM', 'CLOCK'];
 
 // ============================================================
 // HELPERS
@@ -2153,7 +2373,8 @@ function PropertiesPanel({ circuit, selection, onUpdate, sim }) {
     }
 
     const isBusCapable = comp.type === 'INPUT' || comp.type === 'OUTPUT'
-      || comp.type === 'DFF' || comp.type === 'REG' || comp.type === 'COUNTER';
+      || comp.type === 'DFF' || comp.type === 'REG' || comp.type === 'COUNTER'
+      || comp.type === 'ADDER' || comp.type === 'SPLITTER' || comp.type === 'MERGER';
     const isMuxLike = comp.type === 'MUX' || comp.type === 'DEMUX';
     const isDecoder = comp.type === 'DECODER';
     const isDFF = comp.type === 'DFF';
@@ -2297,6 +2518,12 @@ function PropertiesPanel({ circuit, selection, onUpdate, sim }) {
                   ? `Registre ${currentWidth} bits : Q ← D au front montant uniquement si LD = 1.`
                   : comp.type === 'COUNTER'
                   ? `Compteur ${currentWidth} bits : Q ← Q+1 au front montant si EN = 1. Boucle à 0 après ${currentWidth >= 32 ? '2³²-1' : (1 << currentWidth) - 1}.`
+                  : comp.type === 'ADDER'
+                  ? `Additionneur ${currentWidth} bits : S = A + B + Cin, Cout = retenue. Combinatoire (pas d'horloge).`
+                  : comp.type === 'SPLITTER'
+                  ? `Séparateur : éclate un bus de ${currentWidth} bits en ${currentWidth} fils 1-bit (b0 = poids faible).`
+                  : comp.type === 'MERGER'
+                  ? `Fusionneur : regroupe ${currentWidth} fils 1-bit en un bus de ${currentWidth} bits (b0 = poids faible).`
                   : `Bus de ${currentWidth} bits dessiné en ${currentWidth} pistes parallèles.`}
               </p>
             )}
@@ -3105,8 +3332,6 @@ export default function CircuitSimulator() {
   // ---- Mode Challenge ----
   // challengeMode: null hors challenge, sinon { chapterId, levelId, result: null | 'success' | 'fail', error: string, table: rows }
   const [challengeMode, setChallengeMode] = useState(null);
-  // Progress: index du prochain niveau à déverrouiller (progression linéaire)
-  const [challengeProgress, setChallengeProgress] = useState(0); // index dans getAllLevels()
   // leftPanelMode: 'palette' | 'challenges'
   const [leftPanelMode, setLeftPanelMode] = useState('palette');
 
@@ -3212,31 +3437,6 @@ export default function CircuitSimulator() {
     }, 300);
     return () => clearTimeout(t);
   }, [tabsState, editMode, prefs]);
-
-  // -------- CHALLENGES : chargement et sauvegarde progression --------
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await storage.get(CHALLENGES_STORAGE_KEY);
-        if (r?.value) {
-          const data = JSON.parse(r.value);
-          setChallengeProgress(data.progressIndex ?? 0);
-        }
-      } catch {}
-    })();
-  }, []);
-
-  useEffect(() => {
-    // Sauvegarde la progression des challenges
-    const t = setTimeout(() => {
-      try {
-        storage.set(CHALLENGES_STORAGE_KEY, JSON.stringify({
-          progressIndex: challengeProgress,
-        }));
-      } catch {}
-    }, 300);
-    return () => clearTimeout(t);
-  }, [challengeProgress]);
 
   // -------- SIMULATION --------
   const sim = useMemo(() => simulate(circuit), [circuit]);
@@ -4656,7 +4856,7 @@ export default function CircuitSimulator() {
           className="px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium text-stone-700 hover:bg-stone-100"
           title="Niveaux de challenge (apprentissage progressif)"
         >
-          🏆 Challenges
+          <Trophy size={14} /> Challenges
         </button>
 
         {/* Bouton Tick : ne s'affiche que si au moins une CLOCK manuelle est présente */}
@@ -4791,11 +4991,6 @@ export default function CircuitSimulator() {
                             error: result.error,
                             table: result.table,
                           });
-                          if (result.success) {
-                            const allLevels = getAllLevels();
-                            const currentIdx = allLevels.findIndex((l) => l.id === challengeMode.levelId && l.chapterId === challengeMode.chapterId);
-                            setChallengeProgress(currentIdx + 1);
-                          }
                         }}
                         className="w-full px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700"
                       >
@@ -4862,38 +5057,44 @@ export default function CircuitSimulator() {
                 );
               })()
             ) : (
-              // Sélection des niveaux (progression linéaire)
+              // Sélection des niveaux
               <div className="space-y-2 flex-1 overflow-y-auto">
                 {(() => {
+                  const CHAPTER_ICONS = {
+                    portes:       <Zap size={11} />,
+                    arithmetique: <Plus size={11} />,
+                    sequentiel:   <Timer size={11} />,
+                    processeur:   <Cpu size={11} />,
+                    'plus-loin':  <GitBranch size={11} />,
+                  };
+                  const CHAPTER_LABELS = {
+                    portes:       'Portes logiques',
+                    arithmetique: 'Arithmétique',
+                    sequentiel:   'Circuits séquentiels',
+                    processeur:   'Vers le processeur',
+                    'plus-loin':  'Pour aller plus loin',
+                  };
                   const allLevels = getAllLevels();
                   let currentChapter = null;
-                  return allLevels.map((level, idx) => {
-                    const isUnlocked = idx < challengeProgress;
-                    const isCompleted = idx < challengeProgress - 1; // complété si déjà passé au suivant
-                    const isNext = idx === challengeProgress; // prochain à déverrouiller
+                  return allLevels.map((level) => {
                     const showChapterHeader = level.chapterId !== currentChapter;
                     currentChapter = level.chapterId;
-
                     return (
                       <div key={level.id}>
                         {showChapterHeader && (
-                          <h3 className="font-semibold text-xs text-stone-700 mb-1 mt-2">{level.chapterId === 'portes' ? 'Portes logiques' : level.chapterId === 'combinatoire' ? 'Circuits combinatoires' : level.chapterId === 'sequentiel' ? 'Circuits séquentiels' : 'Processeur'}</h3>
+                          <h3 className="font-semibold text-xs text-stone-700 mb-1 mt-2 flex items-center gap-1">
+                            {CHAPTER_ICONS[level.chapterId]}
+                            {CHAPTER_LABELS[level.chapterId] ?? level.chapterId}
+                          </h3>
                         )}
                         <button
                           onClick={() => {
-                            if (isUnlocked || isNext) {
-                              setCircuit({ components: [], wires: [], customDefinitions: circuit.customDefinitions || {} });
-                              setChallengeMode({ chapterId: level.chapterId, levelId: level.id, result: null, error: null, table: null });
-                            }
+                            setCircuit({ components: [], wires: [], customDefinitions: circuit.customDefinitions || {} });
+                            setChallengeMode({ chapterId: level.chapterId, levelId: level.id, result: null, error: null, table: null });
                           }}
-                          disabled={!isUnlocked && !isNext}
-                          className={`block w-full text-left px-2 py-1.5 rounded text-xs font-medium transition ${
-                            isUnlocked || isNext ? 'bg-blue-50 text-blue-900 hover:bg-blue-100' : 'bg-stone-100 text-stone-400 cursor-not-allowed'
-                          }`}
+                          className="block w-full text-left px-2 py-1.5 rounded text-xs font-medium transition bg-blue-50 text-blue-900 hover:bg-blue-100"
                         >
-                          {isCompleted && '✓'} {level.title}
-                          {!isUnlocked && !isNext && ' 🔒'}
-                          {isNext && ' →'}
+                          {level.title}
                         </button>
                       </div>
                     );
@@ -4939,6 +5140,21 @@ export default function CircuitSimulator() {
           </div>
           <div className="space-y-1.5">
             {PALETTE_ORDER.filter((t) => GATES[t].category === 'Bus').map((t) => (
+              <PaletteItem
+                key={t}
+                type={t}
+                onMouseDown={handlePaletteMouseDown}
+                picked={placeType === t}
+                customDefs={circuit.customDefinitions}
+              />
+            ))}
+          </div>
+
+          <div className="mt-4 text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">
+            Arithmétique
+          </div>
+          <div className="space-y-1.5">
+            {PALETTE_ORDER.filter((t) => GATES[t].category === 'Arithmétique').map((t) => (
               <PaletteItem
                 key={t}
                 type={t}

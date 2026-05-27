@@ -148,6 +148,28 @@ export function simulate(circuit, getDef, customDefs = null, recursionStack = ne
       const inVal = maskTo(w, asInt(inputVals[0]));
       outVals = [];
       for (let i = 0; i < n; i++) outVals.push(i === inVal ? 1 : 0);
+    } else if (comp.type === 'SPLITTER') {
+      // Bus → bits : chaque sortie b{k} = bit k du bus d'entrée.
+      const width = comp.state?.width ?? 4;
+      const busVal = maskTo(width, asInt(inputVals[0]));
+      outVals = def.outputs.map((p) => (busVal >> Number(p.name.slice(1))) & 1);
+    } else if (comp.type === 'MERGER') {
+      // Bits → bus : reconstitue un entier à partir des entrées b{k}.
+      const width = comp.state?.width ?? 4;
+      let v = 0;
+      def.inputs.forEach((p, idx) => {
+        v |= (asInt(inputVals[idx]) & 1) << Number(p.name.slice(1));
+      });
+      outVals = [maskTo(width, v)];
+    } else if (comp.type === 'ADDER') {
+      // Additionneur combinatoire N-bit : S = (A + B + Cin) mod 2^width, Cout = retenue.
+      const width = comp.state?.width ?? 4;
+      const a = maskTo(width, asInt(inputVals[0])) >>> 0;
+      const b = maskTo(width, asInt(inputVals[1])) >>> 0;
+      const cin = asInt(inputVals[2]) & 1;
+      const raw = a + b + cin;
+      const limit = Math.pow(2, width);
+      outVals = [maskTo(width, raw % limit), raw >= limit ? 1 : 0];
     } else if (comp.type === 'REG') {
       const width = comp.state?.width ?? 4;
       outVals = [maskTo(width, asInt(comp.state?.q))];

@@ -153,6 +153,47 @@ export const GATES = {
       };
     },
   },
+  SPLITTER: {
+    defaultState: { width: 4 },
+    getDynamicGeometry: (comp) => {
+      const n = comp?.state?.width ?? 4;
+      const outputs = [];
+      for (let i = 0; i < n; i++) {
+        const bit = n - 1 - i;
+        outputs.push({ name: `b${bit}`, x: 0, y: 0, width: 1 });
+      }
+      return { inputs: [{ name: 'in', x: 0, y: 0, width: n }], outputs };
+    },
+  },
+  MERGER: {
+    defaultState: { width: 4 },
+    getDynamicGeometry: (comp) => {
+      const n = comp?.state?.width ?? 4;
+      const inputs = [];
+      for (let i = 0; i < n; i++) {
+        const bit = n - 1 - i;
+        inputs.push({ name: `b${bit}`, x: 0, y: 0, width: 1 });
+      }
+      return { inputs, outputs: [{ name: 'out', x: 0, y: 0, width: n }] };
+    },
+  },
+  ADDER: {
+    defaultState: { width: 4 },
+    getDynamicGeometry: (comp) => {
+      const w = comp?.state?.width ?? 4;
+      return {
+        inputs: [
+          { name: 'A',   x: 0, y: 0, width: w },
+          { name: 'B',   x: 0, y: 0, width: w },
+          { name: 'Cin', x: 0, y: 0, width: 1 },
+        ],
+        outputs: [
+          { name: 'S',    x: 0, y: 0, width: w },
+          { name: 'Cout', x: 0, y: 0, width: 1 },
+        ],
+      };
+    },
+  },
   RAM: {
     defaultState: { addrWidth: 3, dataWidth: 4, mem: [0,0,0,0,0,0,0,0], lastClk: 0 },
     getDynamicGeometry: (comp) => {

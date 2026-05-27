@@ -320,6 +320,111 @@ test('additionneur 4-bit ripple-carry : 16×16 = 256 cas', () => {
 });
 
 // =====================================================================
+// 5b. COMPOSANT ADDER (additionneur intégré, combinatoire)
+// =====================================================================
+suite('composant ADDER');
+
+function makeAdder(width = 4) {
+  return { id: tid('add'), type: 'ADDER', x: 0, y: 0, state: { width } };
+}
+
+function runAdder(width, A, B, Cin) {
+  const a = makeInput(width, A);
+  const b = makeInput(width, B);
+  const cin = makeInput(1, Cin);
+  const add = makeAdder(width);
+  const c = {
+    components: [a, b, cin, add],
+    wires: [
+      makeWire(a, add, 'out0', 'A'),
+      makeWire(b, add, 'out0', 'B'),
+      makeWire(cin, add, 'out0', 'Cin'),
+    ],
+  };
+  const sim = simulate(c);
+  return { S: getOutputAt(sim, add, 'S'), Cout: getOutputAt(sim, add, 'Cout') };
+}
+
+test('ADDER 4-bit : somme et retenue sortante', () => {
+  const cases = [
+    [0, 0, 0, 0, 0],
+    [3, 5, 0, 8, 0],
+    [7, 8, 0, 15, 0],
+    [15, 1, 0, 0, 1],   // débordement → Cout
+    [9, 9, 1, 3, 1],    // 19 = 0b10011 → S=3, Cout=1
+    [15, 15, 1, 15, 1], // 31 = 0b11111 → S=15, Cout=1
+  ];
+  for (const [A, B, Cin, S, Cout] of cases) {
+    const r = runAdder(4, A, B, Cin);
+    assertEq(r.S, S, `${A}+${B}+${Cin} → S`);
+    assertEq(r.Cout, Cout, `${A}+${B}+${Cin} → Cout`);
+  }
+});
+
+test('ADDER 1-bit : identique à un additionneur complet', () => {
+  for (let A = 0; A < 2; A++)
+    for (let B = 0; B < 2; B++)
+      for (let Cin = 0; Cin < 2; Cin++) {
+        const r = runAdder(1, A, B, Cin);
+        const sum = A + B + Cin;
+        assertEq(r.S, sum & 1, `${A}+${B}+${Cin} S`);
+        assertEq(r.Cout, sum >> 1, `${A}+${B}+${Cin} Cout`);
+      }
+});
+
+test('ADDER 8-bit : addition large avec retenue', () => {
+  assertEq(runAdder(8, 200, 100, 0).S, 44, '200+100 mod 256');
+  assertEq(runAdder(8, 200, 100, 0).Cout, 1, '200+100 → Cout');
+  assertEq(runAdder(8, 100, 27, 0).S, 127, '100+27');
+  assertEq(runAdder(8, 100, 27, 0).Cout, 0, 'pas de débordement');
+});
+
+// =====================================================================
+// 5c. SPLITTER / MERGER (bus ↔ bits, combinatoire)
+// =====================================================================
+suite('composants SPLITTER / MERGER');
+
+test('SPLITTER 4-bit : éclate un bus en 4 bits', () => {
+  for (const v of [0, 1, 5, 10, 15]) {
+    const inp = makeInput(4, v);
+    const sp = { id: tid('sp'), type: 'SPLITTER', x: 0, y: 0, state: { width: 4 } };
+    const c = { components: [inp, sp], wires: [makeWire(inp, sp, 'out0', 'in')] };
+    const sim = simulate(c);
+    for (let b = 0; b < 4; b++) {
+      assertEq(getOutputAt(sim, sp, `b${b}`), (v >> b) & 1, `v=${v} bit ${b}`);
+    }
+  }
+});
+
+test('MERGER 4-bit : regroupe 4 bits en un bus', () => {
+  for (const v of [0, 1, 5, 10, 15]) {
+    const bits = [0, 1, 2, 3].map((b) => makeInput(1, (v >> b) & 1));
+    const mg = { id: tid('mg'), type: 'MERGER', x: 0, y: 0, state: { width: 4 } };
+    const c = {
+      components: [...bits, mg],
+      wires: bits.map((bi, b) => makeWire(bi, mg, 'out0', `b${b}`)),
+    };
+    assertEq(getOutputAt(simulate(c), mg, 'out'), v, `v=${v}`);
+  }
+});
+
+test('SPLITTER → MERGER : aller-retour reconstruit la valeur', () => {
+  for (const v of [0, 3, 9, 14]) {
+    const inp = makeInput(4, v);
+    const sp = { id: tid('sp'), type: 'SPLITTER', x: 0, y: 0, state: { width: 4 } };
+    const mg = { id: tid('mg'), type: 'MERGER', x: 0, y: 0, state: { width: 4 } };
+    const c = {
+      components: [inp, sp, mg],
+      wires: [
+        makeWire(inp, sp, 'out0', 'in'),
+        ...[0, 1, 2, 3].map((b) => makeWire(sp, mg, `b${b}`, `b${b}`)),
+      ],
+    };
+    assertEq(getOutputAt(simulate(c), mg, 'out'), v, `v=${v}`);
+  }
+});
+
+// =====================================================================
 // 6. SÉQUENTIEL 1-BIT : DFF + SR LATCH
 // =====================================================================
 suite('séquentiel : DFF (1-bit)');
