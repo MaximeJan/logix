@@ -122,6 +122,25 @@ function addrBitsFor(n) {
   return Math.max(1, Math.ceil(Math.log2(n)));
 }
 
+// Trace un rectangle dont seuls certains coins sont arrondis (les autres carrés).
+// Sert aux cellules de bus : les coins externes de la rangée sont arrondis, mais
+// les séparations internes entre bits restent carrées.
+function roundedRectPath(x, y, w, h, r, { tl, tr, br, bl }) {
+  const rtl = tl ? r : 0, rtr = tr ? r : 0, rbr = br ? r : 0, rbl = bl ? r : 0;
+  return [
+    `M ${x + rtl},${y}`,
+    `L ${x + w - rtr},${y}`,
+    rtr ? `A ${rtr},${rtr} 0 0 1 ${x + w},${y + rtr}` : '',
+    `L ${x + w},${y + h - rbr}`,
+    rbr ? `A ${rbr},${rbr} 0 0 1 ${x + w - rbr},${y + h}` : '',
+    `L ${x + rbl},${y + h}`,
+    rbl ? `A ${rbl},${rbl} 0 0 1 ${x},${y + h - rbl}` : '',
+    `L ${x},${y + rtl}`,
+    rtl ? `A ${rtl},${rtl} 0 0 1 ${x + rtl},${y}` : '',
+    'Z',
+  ].join(' ');
+}
+
 // ============================================================
 // DÉFINITIONS DES COMPOSANTS
 // Chaque port a une `width` (largeur en bits). 1 = signal classique, >1 = bus.
@@ -257,7 +276,7 @@ const GATES = {
     getDynamicGeometry: (comp) => {
       const width = comp?.state?.width ?? 1;
       if (width === 1) {
-        return { w: 44, h: 44, inputs: [], outputs: [{ name: 'out', x: 44, y: 22, width: 1 }] };
+        return { w: 36, h: 40, inputs: [], outputs: [{ name: 'out', x: 36, y: 20, width: 1 }] };
       }
       const cellSize = INPUT_BUS_CELL_SIZE;
       const w = width * cellSize + 8;
@@ -271,17 +290,17 @@ const GATES = {
       if (width === 1) {
         return (
           <>
-            <rect x="0" y="0" width="38" height="44" rx="6"
+            <rect x="3" y="7" width="26" height="26" rx="2"
                   fill={v ? 'var(--input-on, #84cc16)' : 'white'} />
-            <text x="19" y="30" textAnchor="middle"
-                  fontSize="20" fontWeight="700"
+            <text x="16" y="25" textAnchor="middle"
+                  fontSize="16" fontWeight="700"
                   fontFamily="'IBM Plex Mono', monospace"
-                  fill={v ? '#1a2e05' : '#475569'}
-                  transform={uprightTransform(angle, 19, 22)}
+                  fill={v ? '#1a2e05' : '#94a3b8'}
+                  transform={uprightTransform(angle, 16, 20)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>
               {v ? '1' : '0'}
             </text>
-            <line x1="38" y1="22" x2="44" y2="22" />
+            <line x1="29" y1="20" x2="36" y2="20" />
           </>
         );
       }
@@ -298,9 +317,11 @@ const GATES = {
         const cx = i * cellSize + cellSize / 2;
         const cy = cellY + cellH / 2;
         cells.push(
-          <rect key={`r${i}`}
-                x={i * cellSize} y={cellY}
-                width={cellSize} height={cellH}
+          <path key={`r${i}`}
+                d={roundedRectPath(i * cellSize, cellY, cellSize, cellH, 3, {
+                  tl: i === 0, bl: i === 0,
+                  tr: i === width - 1, br: i === width - 1,
+                })}
                 fill={bit ? 'var(--input-on, #84cc16)' : 'white'}
                 stroke="#1f2937" strokeWidth={0.8} />
         );
@@ -355,12 +376,12 @@ const GATES = {
         return (
           <>
             <line x1="0" y1="20" x2="9" y2="20" />
-            <circle cx="22" cy="20" r="13"
-                    fill={isOn ? 'var(--output-on, #f97316)' : 'white'} />
-            <text x="22" y="24" textAnchor="middle"
-                  fontSize="14" fontWeight="600"
+            <rect x="9" y="7" width="26" height="26" rx="2"
+                  fill={isOn ? 'var(--output-on, #f97316)' : 'white'} />
+            <text x="22" y="25" textAnchor="middle"
+                  fontSize="16" fontWeight="700"
                   fontFamily="'IBM Plex Mono', monospace"
-                  fill={isOn ? '#ffffff' : '#94a3b8'}
+                  fill={isOn ? '#1a2e05' : '#94a3b8'}
                   transform={uprightTransform(angle, 22, 20)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>
               {isOn ? '1' : '0'}
@@ -375,13 +396,13 @@ const GATES = {
       return (
         <>
           <line x1="0" y1="20" x2="5" y2="20" />
-          <rect x="5" y="0" width="65" height="40" rx="6"
+          <rect x="5" y="0" width="65" height="40" rx="2"
                 fill={anyBit ? 'var(--output-on, #f97316)' : 'white'}
                 stroke="#1f2937" />
           <text x="37.5" y="22" textAnchor="middle"
-                fontSize="11" fontWeight="600"
+                fontSize="11" fontWeight="700"
                 fontFamily="'IBM Plex Mono', monospace"
-                fill={anyBit ? '#ffffff' : '#1f2937'}
+                fill={anyBit ? '#1a2e05' : '#94a3b8'}
                 transform={uprightTransform(angle, 37.5, 20)}
                 style={{ userSelect: 'none', pointerEvents: 'none' }}>
             {prefix + display}
@@ -888,7 +909,7 @@ const GATES = {
       const lcdH = h - 44;
       const lcdY = (h - lcdH) / 2;
       // LED décalé à droite pour laisser la place à « CLK » + triangle (~60px)
-      const lcdX = 62, lcdW = w - 82;
+      const lcdX = 62, lcdW = w - 98;
       return (
         <>
           {/* Stubs */}
@@ -981,7 +1002,7 @@ const GATES = {
       const lcdH = h - 44;
       const lcdY = (h - lcdH) / 2;
       // LED décalé à droite pour laisser la place à « CLK » + triangle (~66px)
-      const lcdX = 66, lcdW = w - 86;
+      const lcdX = 66, lcdW = w - 102;
       return (
         <>
           {/* Stubs */}
@@ -1068,7 +1089,7 @@ const GATES = {
       const lcdH = h - 44;
       const lcdY = (h - lcdH) / 2;
       // LED décalé à droite pour laisser la place à « CLK » + triangle (~66px)
-      const lcdX = 66, lcdW = w - 86;
+      const lcdX = 66, lcdW = w - 102;
       return (
         <>
           {/* Stubs */}
@@ -1134,86 +1155,92 @@ const GATES = {
     defaultState: { width: 4 },
     getDynamicGeometry: (comp) => {
       const width = comp?.state?.width ?? 4;
-      const w = widthForBits(width, { minW: 148, portMargin: 36 });
+      const w = widthForBits(width, { minW: 168, portMargin: 36 });
       const h = 92;
       return {
         w, h,
         inputs: [
-          { name: 'A',   x: 0, y: 22, width },
+          { name: 'A',   x: 0, y: 24, width },
           { name: 'B',   x: 0, y: 46, width },
-          { name: 'Cin', x: 0, y: 70, width: 1 },
+          { name: 'Cin', x: 0, y: 68, width: 1 },
         ],
         outputs: [
           { name: 'S',    x: w, y: 34, width },
-          { name: 'Cout', x: w, y: 62, width: 1 },
+          { name: 'Cout', x: w, y: 64, width: 1 },
         ],
       };
     },
     shape: (comp, outputValue, _i, _ibn, angle) => {
       const width = comp?.state?.width ?? 4;
       const s = maskTo(width, asInt(outputValue));
-      const w = widthForBits(width, { minW: 148, portMargin: 36 });
+      const w = widthForBits(width, { minW: 168, portMargin: 36 });
       const h = 92;
-      const lcdH = 26;
-      const lcdY = (h - lcdH) / 2;
-      const lcdX = 64, lcdW = w - 84;
+      const valText = width === 1 ? String(s) : formatBitsGrouped(s, width);
+      const midX = w / 2;
+      const lcdW = Math.max(30, valText.length * 9 + 14);
+      const lcdH = 22;
+      const lcdX = midX - lcdW / 2;
+      const lcdY = 46;
       return (
         <>
           {/* Stubs entrées */}
-          <line x1="0" y1="22" x2="14" y2="22" strokeWidth="1.2" />
+          <line x1="0" y1="24" x2="14" y2="24" strokeWidth="1.2" />
           <line x1="0" y1="46" x2="14" y2="46" strokeWidth="1.2" />
-          <line x1="0" y1="70" x2="14" y2="70" strokeWidth="1.2" />
+          <line x1="0" y1="68" x2="14" y2="68" strokeWidth="1.2" />
           {/* Stubs sorties */}
           <line x1={w - 14} y1="34" x2={w} y2="34" strokeWidth="1.2" />
-          <line x1={w - 14} y1="62" x2={w} y2="62" strokeWidth="1.2" />
+          <line x1={w - 14} y1="64" x2={w} y2="64" strokeWidth="1.2" />
           {/* Cercles aux entrées */}
-          <circle cx="2.5" cy="22" r="2.5" fill="white" strokeWidth="1.2" />
+          <circle cx="2.5" cy="24" r="2.5" fill="white" strokeWidth="1.2" />
           <circle cx="2.5" cy="46" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="70" r="2.5" fill="white" strokeWidth="1.2" />
+          <circle cx="2.5" cy="68" r="2.5" fill="white" strokeWidth="1.2" />
           {/* Disques aux sorties */}
           <circle cx={w - 2.5} cy="34" r="3"
                   fill={s ? 'var(--lcd-text, #fbbf24)' : '#1f2937'}
                   stroke="#1f2937" strokeWidth="1" />
-          <circle cx={w - 2.5} cy="62" r="3" fill="#1f2937" stroke="#1f2937" strokeWidth="1" />
+          <circle cx={w - 2.5} cy="64" r="3" fill="#1f2937" stroke="#1f2937" strokeWidth="1" />
           {/* Boîtier */}
           <rect x="14" y="10" width={w - 28} height={h - 20}
                 fill="white" stroke="#0f172a" strokeWidth="2" />
-          {/* Cadre LED */}
+          {/* Cadre LED (centré, sous le « + ») */}
           <rect x={lcdX} y={lcdY} width={lcdW} height={lcdH} rx="2"
                 fill="var(--lcd-fill, #0f172a)" stroke="var(--lcd-border, #0f172a)" strokeWidth="1" />
           <g stroke="none">
-            <text x="20" y="27" fontSize="14" fontWeight="700"
+            {/* Labels des entrées (gauche) */}
+            <text x="20" y="29" fontSize="14" fontWeight="700"
                   fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
-                  transform={uprightTransform(angle, 20, 22)}
+                  transform={uprightTransform(angle, 20, 24)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>A</text>
             <text x="20" y="51" fontSize="14" fontWeight="700"
                   fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
                   transform={uprightTransform(angle, 20, 46)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>B</text>
-            <text x="20" y="74" fontSize="11" fontWeight="700"
+            <text x="20" y="72" fontSize="11" fontWeight="700"
                   fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
-                  transform={uprightTransform(angle, 20, 70)}
+                  transform={uprightTransform(angle, 20, 68)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>Cin</text>
-            {/* Gros symbole + */}
-            <text x={lcdX - 12} y={h / 2 + 6} textAnchor="middle" fontSize="20" fontWeight="700"
+            {/* Labels des sorties (droite, collés au bord, hors du LCD) */}
+            <text x={w - 16} y="39" textAnchor="end" fontSize="14" fontWeight="700"
                   fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
-                  transform={uprightTransform(angle, lcdX - 12, h / 2)}
-                  style={{ userSelect: 'none', pointerEvents: 'none' }}>+</text>
-            <text x={w - 20} y="39" textAnchor="end" fontSize="14" fontWeight="700"
-                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
-                  transform={uprightTransform(angle, w - 20, 34)}
+                  transform={uprightTransform(angle, w - 16, 34)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>S</text>
-            <text x={w - 20} y="66" textAnchor="end" fontSize="11" fontWeight="700"
+            <text x={w - 16} y="69" textAnchor="end" fontSize="11" fontWeight="700"
                   fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
-                  transform={uprightTransform(angle, w - 20, 62)}
+                  transform={uprightTransform(angle, w - 16, 64)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>Cout</text>
-            <text x={lcdX + lcdW / 2} y={lcdY + lcdH / 2 + 5} textAnchor="middle"
-                  fontSize={width === 1 ? 18 : 13} fontWeight="700"
+            {/* Symbole « + » au-dessus du contenu */}
+            <text x={midX} y="33" textAnchor="middle" fontSize="17" fontWeight="700"
+                  fontFamily="'IBM Plex Mono', monospace" fill="#1f2937"
+                  transform={uprightTransform(angle, midX, 28)}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>+</text>
+            {/* Valeur de la somme dans le LCD */}
+            <text x={midX} y={lcdY + lcdH / 2 + 5} textAnchor="middle"
+                  fontSize={width === 1 ? 16 : 13} fontWeight="700"
                   fontFamily="'IBM Plex Mono', monospace"
                   fill="var(--lcd-text, #fbbf24)"
-                  transform={uprightTransform(angle, lcdX + lcdW / 2, lcdY + lcdH / 2)}
+                  transform={uprightTransform(angle, midX, lcdY + lcdH / 2)}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>
-              {width === 1 ? String(s) : formatBitsGrouped(s, width)}
+              {valText}
             </text>
           </g>
         </>
@@ -1260,7 +1287,7 @@ const GATES = {
       const lcdH = h - 56;
       const lcdY = (h - lcdH) / 2;
       // LED décalé pour laisser passer « CLK » + triangle (~60px) sur le port CLK
-      const lcdX = 62, lcdW = w - 82;
+      const lcdX = 62, lcdW = w - 98;
       return (
         <>
           {/* Stubs */}
