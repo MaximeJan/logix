@@ -1,4 +1,4 @@
-# Circuit Simulator — projet pédagogique
+# Logix — projet pédagogique
 
 Simulateur de circuits logiques de type Logisim destiné à des élèves d'OC informatique au gymnase suisse (Fribourg). L'objectif est qu'un élève puisse progresser des portes logiques de base jusqu'à un petit processeur, sans rien installer (app web, autosave navigateur).
 

@@ -5,7 +5,7 @@
   "author": "Maxime Jan",
   "license": "CC-BY-NC-4.0",
   "type": "module",
-  "description": "Simulateur de circuits logiques pour cours d'OC informatique (gymnase)",
+  "description": "Logix — simulateur de circuits logiques pour cours d'OC informatique (gymnase)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
