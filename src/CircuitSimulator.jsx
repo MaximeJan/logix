@@ -3428,9 +3428,6 @@ export default function CircuitSimulator() {
           const data = JSON.parse(r.value);
           const loaded = deserializeAll(data);
           setTabsState(loaded);
-          if (data.preferences) {
-            setPrefs({ ...DEFAULT_PREFS, ...data.preferences });
-          }
         }
         const rp = await storage.get(PREFS_STORAGE_KEY);
         if (rp?.value) {
@@ -3463,7 +3460,6 @@ export default function CircuitSimulator() {
     const t = setTimeout(() => {
       try {
         const data = serializeAll(tabsState);
-        data.preferences = prefs;
         storage.set(STORAGE_KEY, JSON.stringify(data));
       } catch {}
     }, 300);
@@ -3985,10 +3981,10 @@ export default function CircuitSimulator() {
     // Le fichier de sauvegarde contient :
     //  - tous les onglets (tabs[]) + l'onglet actif
     //  - toutes les définitions personnalisées (customDefinitions, partagées)
-    //  - les préférences d'apparence (preferences)
     //  - la version du format (pour de futures migrations)
+    // L'apparence (couleurs, épaisseurs, fond) n'est PAS incluse : c'est une
+    // préférence locale au navigateur, indépendante du circuit.
     const data = serializeAll(tabsState);
-    data.preferences = prefs;
     // Nom de fichier : si un seul onglet on prend son nom, sinon "circuits".
     // Plus honnête qu'utiliser le nom de l'onglet actif quand le fichier en contient plusieurs.
     const baseName = tabsState.tabs.length === 1
@@ -4014,10 +4010,6 @@ export default function CircuitSimulator() {
         historyByTab.current = {};
         setTabsState(loaded);
         setSelection({ components: [], wires: [] });
-        // Appliquer les préférences du fichier si présentes
-        if (data.preferences && typeof data.preferences === 'object') {
-          setPrefs({ ...DEFAULT_PREFS, ...data.preferences });
-        }
       } catch (err) {
         alert('Erreur de chargement : ' + err.message);
       }
