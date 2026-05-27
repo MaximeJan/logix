@@ -28,6 +28,13 @@ const STORAGE_KEY = 'circuit:autosave';
 const PREFS_STORAGE_KEY = 'circuit:prefs';
 const CHALLENGES_STORAGE_KEY = 'circuit:challenges';
 
+// Adaptateur de stockage : utilise window.storage (Tauri/Electron) si disponible,
+// sinon localStorage standard (navigateur web / GitHub Pages).
+const storage = window.storage ?? {
+  get: (key) => Promise.resolve({ value: localStorage.getItem(key) }),
+  set: (key, value) => { localStorage.setItem(key, value); },
+};
+
 // Préférences d'apparence par défaut (couleurs, épaisseurs, fond du canevas)
 const DEFAULT_PREFS = {
   wireOnColor: '#65a30d',
@@ -3159,26 +3166,21 @@ export default function CircuitSimulator() {
     // Charge au montage
     (async () => {
       try {
-        if (window.storage) {
-          const r = await window.storage.get(STORAGE_KEY);
-          if (r?.value) {
-            const data = JSON.parse(r.value);
-            const loaded = deserializeAll(data);
-            setTabsState(loaded);
-            // Si le fichier auto-sauvé contient des préférences, on les applique
-            if (data.preferences) {
-              setPrefs({ ...DEFAULT_PREFS, ...data.preferences });
-            }
+        const r = await storage.get(STORAGE_KEY);
+        if (r?.value) {
+          const data = JSON.parse(r.value);
+          const loaded = deserializeAll(data);
+          setTabsState(loaded);
+          if (data.preferences) {
+            setPrefs({ ...DEFAULT_PREFS, ...data.preferences });
           }
-          // Charge également les préférences mémorisées par le navigateur
-          // (utile si l'utilisateur a fait "Nouveau circuit" depuis un projet précédent)
-          const rp = await window.storage.get(PREFS_STORAGE_KEY);
-          if (rp?.value) {
-            try {
-              const p = JSON.parse(rp.value);
-              setPrefs((prev) => ({ ...DEFAULT_PREFS, ...prev, ...p }));
-            } catch {}
-          }
+        }
+        const rp = await storage.get(PREFS_STORAGE_KEY);
+        if (rp?.value) {
+          try {
+            const p = JSON.parse(rp.value);
+            setPrefs((prev) => ({ ...DEFAULT_PREFS, ...prev, ...p }));
+          } catch {}
         }
       } catch (e) {
         // Pas grave : on démarre vide
@@ -3190,9 +3192,7 @@ export default function CircuitSimulator() {
     // Sauvegarde des préférences à part (persistance navigateur, indépendante du fichier)
     const t = setTimeout(() => {
       try {
-        if (window.storage) {
-          window.storage.set(PREFS_STORAGE_KEY, JSON.stringify(prefs));
-        }
+        storage.set(PREFS_STORAGE_KEY, JSON.stringify(prefs));
       } catch {}
     }, 200);
     return () => clearTimeout(t);
@@ -3205,13 +3205,9 @@ export default function CircuitSimulator() {
     if (editMode) return;
     const t = setTimeout(() => {
       try {
-        if (window.storage) {
-          // On embarque les préférences dans la sauvegarde
-          // pour qu'un rechargement restaure le tout d'un coup.
-          const data = serializeAll(tabsState);
-          data.preferences = prefs;
-          window.storage.set(STORAGE_KEY, JSON.stringify(data));
-        }
+        const data = serializeAll(tabsState);
+        data.preferences = prefs;
+        storage.set(STORAGE_KEY, JSON.stringify(data));
       } catch {}
     }, 300);
     return () => clearTimeout(t);
@@ -3221,12 +3217,10 @@ export default function CircuitSimulator() {
   useEffect(() => {
     (async () => {
       try {
-        if (window.storage) {
-          const r = await window.storage.get(CHALLENGES_STORAGE_KEY);
-          if (r?.value) {
-            const data = JSON.parse(r.value);
-            setChallengeProgress(data.progressIndex ?? 0);
-          }
+        const r = await storage.get(CHALLENGES_STORAGE_KEY);
+        if (r?.value) {
+          const data = JSON.parse(r.value);
+          setChallengeProgress(data.progressIndex ?? 0);
         }
       } catch {}
     })();
@@ -3236,11 +3230,9 @@ export default function CircuitSimulator() {
     // Sauvegarde la progression des challenges
     const t = setTimeout(() => {
       try {
-        if (window.storage) {
-          window.storage.set(CHALLENGES_STORAGE_KEY, JSON.stringify({
-            progressIndex: challengeProgress,
-          }));
-        }
+        storage.set(CHALLENGES_STORAGE_KEY, JSON.stringify({
+          progressIndex: challengeProgress,
+        }));
       } catch {}
     }, 300);
     return () => clearTimeout(t);
