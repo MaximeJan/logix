@@ -2561,25 +2561,31 @@ function PropertiesPanel({ circuit, selection, onUpdate, sim }) {
                 onUpdate(id, { state: newState, _dropMismatchedWires: true });
               }}
             />
-            {currentWidth > 1 && (
-              <p className="text-[11px] text-stone-500 mt-1 leading-snug">
-                {comp.type === 'INPUT'
-                  ? `${currentWidth} cellules cliquables sur le composant — cliquer un bit pour le basculer.`
-                  : comp.type === 'DFF'
-                  ? `Registre ${currentWidth} bits : Q stocke un entier sur ${currentWidth} bits, capturé en bloc au front montant.`
-                  : comp.type === 'REG'
-                  ? `Registre ${currentWidth} bits : Q ← D au front montant uniquement si LD = 1.`
-                  : comp.type === 'COUNTER'
-                  ? `Compteur ${currentWidth} bits : Q ← Q+1 au front montant si EN = 1. Boucle à 0 après ${currentWidth >= 32 ? '2³²-1' : (1 << currentWidth) - 1}.`
-                  : comp.type === 'ADDER'
-                  ? `Additionneur ${currentWidth} bits : S = A + B + Cin, Cout = retenue. Combinatoire (pas d'horloge).`
-                  : comp.type === 'SPLITTER'
-                  ? `Séparateur : éclate un bus de ${currentWidth} bits en ${currentWidth} fils 1-bit (b0 = poids faible).`
-                  : comp.type === 'MERGER'
-                  ? `Fusionneur : regroupe ${currentWidth} fils 1-bit en un bus de ${currentWidth} bits (b0 = poids faible).`
-                  : `Bus de ${currentWidth} bits dessiné en ${currentWidth} pistes parallèles.`}
-              </p>
-            )}
+            {(() => {
+              const s = currentWidth > 1 ? 's' : '';
+              const bits = `${currentWidth} bit${s}`;
+              return (
+                <p className="text-[11px] text-stone-500 mt-1 leading-snug">
+                  {comp.type === 'INPUT'
+                    ? `${currentWidth} cellule${s} cliquable${s} sur le composant — cliquer un bit pour le basculer.`
+                    : comp.type === 'DFF'
+                    ? `Bascule D ${bits} : Q capture D au front montant${currentWidth > 1 ? ' (se comporte comme un registre)' : ''}.`
+                    : comp.type === 'REG'
+                    ? `Registre ${bits} : Q ← D au front montant uniquement si LD = 1.`
+                    : comp.type === 'COUNTER'
+                    ? `Compteur ${bits} : Q ← Q+1 au front montant si EN = 1. Boucle à 0 après ${currentWidth >= 32 ? '2³²-1' : (1 << currentWidth) - 1}.`
+                    : comp.type === 'ADDER'
+                    ? `Additionneur ${bits} : S = A + B + Cin, Cout = retenue. Combinatoire (pas d'horloge).`
+                    : comp.type === 'SPLITTER'
+                    ? `Séparateur : éclate un bus de ${bits} en ${currentWidth} fil${s} 1-bit (b0 = poids faible).`
+                    : comp.type === 'MERGER'
+                    ? `Fusionneur : regroupe ${currentWidth} fil${s} 1-bit en un bus de ${bits} (b0 = poids faible).`
+                    : currentWidth > 1
+                    ? `Bus de ${bits} dessiné en ${currentWidth} pistes parallèles.`
+                    : `Signal classique de 1 bit (ce n'est pas un bus).`}
+                </p>
+              );
+            })()}
           </div>
         )}
 
