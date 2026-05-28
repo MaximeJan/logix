@@ -3358,7 +3358,6 @@ export default function CircuitSimulator() {
   const [clipboard, setClipboard] = useState(null);
   // null = panneau replié. Sinon 'properties' | 'truthtable' | 'chronogram' | 'preferences'.
   const [rightPanelMode, setRightPanelMode] = useState(null);
-  const [showAbout, setShowAbout] = useState(false);
   const [consigneCollapsed, setConsigneCollapsed] = useState(false); // bandeau de consigne du challenge
 
   // ---- Phase 3 : composants personnalisés ----
@@ -4693,7 +4692,6 @@ export default function CircuitSimulator() {
         // Échap ferme en priorité les modales, puis annule placement/câblage/sélection.
         if (saveAsCompState) { setSaveAsCompState(null); return; }
         if (deletePromptName) { setDeletePromptName(null); return; }
-        if (showAbout) { setShowAbout(false); return; }
         if (isTyping) return;
         setPlaceType(null);
         setWireStart(null);
@@ -4943,12 +4941,6 @@ export default function CircuitSimulator() {
             ⚠ Largeurs incompatibles : /{wireWidthMismatch.wFrom} → /{wireWidthMismatch.wTo}
           </div>
         )}
-        <button
-          onClick={() => setShowAbout((v) => !v)}
-          className="text-xs text-stone-500 hover:text-stone-700 px-2"
-        >
-          Aide
-        </button>
       </div>
 
       {/* ===== BARRE D'ONGLETS ===== */}
@@ -5265,10 +5257,6 @@ export default function CircuitSimulator() {
               </>
             );
           })()}
-
-          <div className="mt-4 text-[11px] text-stone-500 leading-relaxed">
-            <strong>Glisser-déposer</strong> un composant sur la grille, ou cliquer puis placer.
-          </div>
 
           {placeType && (() => {
             const def = getDef(placeType, circuit.customDefinitions);
@@ -5998,37 +5986,6 @@ export default function CircuitSimulator() {
         </div>
       )}
 
-      {/* Aide modal */}
-      {showAbout && (
-        <div
-          className="absolute inset-0 bg-black/40 flex items-center justify-center z-50"
-          onClick={() => setShowAbout(false)}
-        >
-          <div
-            className="bg-white rounded-lg p-6 max-w-md shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-medium mb-3">Aide rapide</h2>
-            <div className="text-sm text-stone-600 space-y-2">
-              <div><strong>Placer</strong> : clic sur la palette → clic sur la zone.</div>
-              <div><strong>Câbler</strong> : clic sur un port de sortie → clic sur un port d'entrée.</div>
-              <div><strong>Basculer</strong> : clic sur une entrée pour passer de 0 à 1.</div>
-              <div><strong>Déplacer</strong> : glisser-déposer un composant.</div>
-              <div><strong>Sélectionner plusieurs</strong> : Shift+clic.</div>
-              <div><strong>Onglets</strong> : bouton + pour en créer, double-clic pour renommer, maximum 10. Les composants personnalisés sont partagés entre onglets.</div>
-              <div className="pt-2 border-t border-stone-200">
-                <strong>Raccourcis</strong> : Suppr, Ctrl+Z/Y, Ctrl+C/V, Ctrl+S, Esc.
-              </div>
-            </div>
-            <button
-              onClick={() => setShowAbout(false)}
-              className="mt-4 px-4 py-1.5 bg-stone-800 text-white text-sm rounded hover:bg-stone-700"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
