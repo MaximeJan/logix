@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Save, Upload, Undo2, Redo2, Trash2, Copy, ClipboardPaste, Table2, Power, Package, Check, X, Plus, Activity, Zap, GitBranch, Timer, Cpu, Trophy } from 'lucide-react';
+import { Save, Upload, Undo2, Redo2, Trash2, Copy, ClipboardPaste, Table2, Package, Check, X, Plus, Activity, Zap, GitBranch, Timer, Cpu, Trophy } from 'lucide-react';
+import logixLogo from './assets/logix_text.svg';
 import {
   asInt,
   maskTo,
@@ -4801,13 +4802,8 @@ export default function CircuitSimulator() {
 
       {/* ===== BARRE D'OUTILS ===== */}
       <div className="flex items-center gap-1 px-3 py-2 bg-white border-b border-stone-200 shadow-sm">
-        <div className="flex items-center gap-2 pr-3 mr-2 border-r border-stone-200">
-          <div className="w-7 h-7 rounded bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-sm">
-            <Power size={16} className="text-white" />
-          </div>
-          <div className="text-sm font-medium text-stone-700 select-none">
-            Logix
-          </div>
+        <div className="flex items-center pr-3 mr-2 border-r border-stone-200">
+          <img src={logixLogo} alt="Logix" className="h-7 w-auto select-none" draggable={false} />
         </div>
 
         <ToolbarButton onClick={saveToFile} title="Enregistrer en JSON (Ctrl+S)">
