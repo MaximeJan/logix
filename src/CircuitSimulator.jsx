@@ -3349,7 +3349,8 @@ export default function CircuitSimulator() {
   const [mousePos, setMousePos] = useState(null);
   const [hoveredPort, setHoveredPort] = useState(null);
   const [clipboard, setClipboard] = useState(null);
-  const [rightPanelMode, setRightPanelMode] = useState('properties'); // 'properties' | 'truthtable' | 'chronogram' | 'preferences'
+  // null = panneau replié. Sinon 'properties' | 'truthtable' | 'chronogram' | 'preferences'.
+  const [rightPanelMode, setRightPanelMode] = useState(null);
   const [showAbout, setShowAbout] = useState(false);
   const [consigneCollapsed, setConsigneCollapsed] = useState(false); // bandeau de consigne du challenge
 
@@ -3466,6 +3467,21 @@ export default function CircuitSimulator() {
     }, 300);
     return () => clearTimeout(t);
   }, [tabsState, editMode, prefs]);
+
+  // -------- PANNEAU DROIT : ouverture/fermeture auto --------
+  // Sélectionner un composant ouvre « Propriétés » ; cliquer à côté (désélection)
+  // referme le panneau. Les vues Table/Chrono/Apparence, ouvertes à la demande
+  // depuis la barre du haut, ne sont pas refermées par la désélection.
+  const selectionSig = selection.components.length === 0
+    ? null
+    : (selection.components.length === 1 ? selection.components[0] : `multi:${selection.components.length}`);
+  useEffect(() => {
+    if (selectionSig) {
+      setRightPanelMode('properties');
+    } else {
+      setRightPanelMode((m) => (m === 'properties' ? null : m));
+    }
+  }, [selectionSig]);
 
   // -------- SIMULATION --------
   const sim = useMemo(() => simulate(circuit), [circuit]);
@@ -4888,9 +4904,10 @@ export default function CircuitSimulator() {
           <Trophy size={14} /> Challenges
         </button>
 
-        {/* Bouton Apparence (déplacé depuis le panneau de droite) */}
+        {/* Apparence : seule vue « globale » accessible depuis la barre du haut.
+            Table et Chrono vivent en onglets contextuels du panneau de droite. */}
         <button
-          onClick={() => setRightPanelMode(rightPanelMode === 'preferences' ? 'properties' : 'preferences')}
+          onClick={() => setRightPanelMode((m) => (m === 'preferences' ? null : 'preferences'))}
           className={`px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium transition ${
             rightPanelMode === 'preferences'
               ? 'bg-stone-200 text-stone-800'
@@ -5692,71 +5709,88 @@ export default function CircuitSimulator() {
               </div>
             </div>
           )}
-        </div>
 
-        {/* PANNEAU DROIT */}
-        <div className="w-72 bg-white border-l border-stone-200 flex flex-col">
-          <div className="flex border-b border-stone-200">
-            <button
-              onClick={() => setRightPanelMode('properties')}
-              className={`flex-1 px-1 py-2 text-xs font-medium border-b-2 min-w-0 ${
-                rightPanelMode === 'properties'
-                  ? 'border-amber-500 text-stone-800'
-                  : 'border-transparent text-stone-500 hover:text-stone-700'
-              }`}
-            >
-              Propriétés
-            </button>
-            <button
-              onClick={() => setRightPanelMode('truthtable')}
-              className={`flex-1 px-1 py-2 text-xs font-medium border-b-2 flex items-center justify-center gap-1 min-w-0 ${
-                rightPanelMode === 'truthtable'
-                  ? 'border-amber-500 text-stone-800'
-                  : 'border-transparent text-stone-500 hover:text-stone-700'
-              }`}
-            >
-              <Table2 size={13} />
-              Table
-            </button>
-            <button
-              onClick={() => setRightPanelMode('chronogram')}
-              className={`flex-1 px-1 py-2 text-xs font-medium border-b-2 flex items-center justify-center gap-1 min-w-0 ${
-                rightPanelMode === 'chronogram'
-                  ? 'border-amber-500 text-stone-800'
-                  : 'border-transparent text-stone-500 hover:text-stone-700'
-              }`}
-            >
-              <Activity size={13} />
-              Chrono
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            {rightPanelMode === 'properties' && (
-              <PropertiesPanel circuit={circuit} selection={selection} onUpdate={updateComponent} sim={sim} />
-            )}
-            {rightPanelMode === 'truthtable' && (
-              <TruthTablePanel circuit={circuit} />
-            )}
-            {rightPanelMode === 'chronogram' && (
-              <ChronogramPanel
-                trace={trace}
-                enabled={traceEnabled}
-                onToggle={() => setTraceEnabled((v) => !v)}
-                onClear={clearTrace}
-              />
-            )}
-            {rightPanelMode === 'preferences' && (
-              <PreferencesPanel prefs={prefs} onChange={setPrefs} />
-            )}
-          </div>
+          {/* PANNEAU DROIT — overlay sur le bord droit du canevas : il s'ouvre et se
+              ferme SANS redimensionner le canevas (pas de reflow/rescale du SVG).
+              Onglets contextuels : Table pour les composants combinatoires (portes,
+              mux…), Chrono pour les composants séquentiels (bascules, compteur…). */}
+          {rightPanelMode && (() => {
+          const selComp = selection.components.length === 1
+            ? circuit.components.find((c) => c.id === selection.components[0])
+            : null;
+          const SEQ = new Set(['DFF', 'REG', 'COUNTER', 'RAM', 'SRLATCH', 'CLOCK']);
+          const COMB = new Set(['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'MUX', 'DEMUX', 'DECODER', 'ADDER', 'SPLITTER', 'MERGER']);
+          const extraTab = selComp && SEQ.has(selComp.type) ? 'chronogram'
+            : selComp && COMB.has(selComp.type) ? 'truthtable'
+            : null;
+          const isPrefs = rightPanelMode === 'preferences';
+          const compTabs = ['properties', ...(extraTab ? [extraTab] : [])];
+          const activeView = isPrefs
+            ? 'preferences'
+            : (compTabs.includes(rightPanelMode) ? rightPanelMode : 'properties');
+          const tabLabel = (t) => (t === 'properties' ? 'Propriétés' : t === 'truthtable' ? 'Table' : 'Chrono');
+          const tabIcon = (t) => (t === 'truthtable' ? <Table2 size={12} /> : t === 'chronogram' ? <Activity size={12} /> : null);
+          return (
+            <div className="absolute top-0 right-0 bottom-0 w-72 bg-white border-l border-stone-200 flex flex-col shadow-lg z-30">
+              {isPrefs ? (
+                <div className="flex items-center justify-between border-b border-stone-200 px-3 py-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-stone-600">Apparence</span>
+                  <button onClick={() => setRightPanelMode(null)} title="Replier le panneau"
+                          className="text-stone-400 hover:text-stone-700">
+                    <X size={15} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-stretch border-b border-stone-200">
+                  {compTabs.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setRightPanelMode(t)}
+                      className={`flex-1 px-1 py-2 text-xs font-medium border-b-2 flex items-center justify-center gap-1 min-w-0 ${
+                        activeView === t
+                          ? 'border-amber-500 text-stone-800'
+                          : 'border-transparent text-stone-500 hover:text-stone-700'
+                      }`}
+                    >
+                      {tabIcon(t)}{tabLabel(t)}
+                    </button>
+                  ))}
+                  <button onClick={() => setRightPanelMode(null)} title="Replier le panneau"
+                          className="px-2 border-b-2 border-transparent text-stone-400 hover:text-stone-700">
+                    <X size={15} />
+                  </button>
+                </div>
+              )}
+              <div className="flex-1 overflow-y-auto p-3">
+                {activeView === 'properties' && (
+                  <PropertiesPanel circuit={circuit} selection={selection} onUpdate={updateComponent} sim={sim} />
+                )}
+                {activeView === 'truthtable' && (
+                  <TruthTablePanel circuit={circuit} />
+                )}
+                {activeView === 'chronogram' && (
+                  <ChronogramPanel
+                    trace={trace}
+                    enabled={traceEnabled}
+                    onToggle={() => setTraceEnabled((v) => !v)}
+                    onClear={clearTrace}
+                  />
+                )}
+                {activeView === 'preferences' && (
+                  <PreferencesPanel prefs={prefs} onChange={setPrefs} />
+                )}
+              </div>
 
-          {/* Statistiques */}
-          <div className="p-2 border-t border-stone-200 text-[11px] text-stone-500 flex justify-between"
-               style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-            <span>{circuit.components.length} comp.</span>
-            <span>{circuit.wires.length} fils</span>
-            <span>{selection.components.length + selection.wires.length} sél.</span>
-          </div>
+              {/* Statistiques */}
+              <div className="p-2 border-t border-stone-200 text-[11px] text-stone-500 flex justify-between"
+                   style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                <span>{circuit.components.length} comp.</span>
+                <span>{circuit.wires.length} fils</span>
+                <span>{selection.components.length + selection.wires.length} sél.</span>
+              </div>
+            </div>
+          );
+        })()}
         </div>
       </div>
 
