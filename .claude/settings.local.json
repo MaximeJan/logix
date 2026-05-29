@@ -1,21 +1,31 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/CircuitSimulator.jsx','utf8'\\), {sourceType:'module', plugins:['jsx']}\\); console.log\\('OK'\\)\")",
-      "Bash(npm run *)",
-      "Bash(npm test *)",
-      "Bash(npm install *)",
-      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/CircuitSimulator.jsx','utf8'\\), {sourceType:'module', plugins:['jsx']}\\)\")",
-      "PowerShell(\\(Get-Content \"c:\\\\Users\\\\maxim\\\\OneDrive - EDUETATFR\\\\Projets\\\\circuit-simulator\\\\src\\\\CircuitSimulator.jsx\" | Measure-Object -Line\\).Lines)",
-      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/challenges.js','utf8'\\), {sourceType:'module'}\\)\")",
-      "Bash(node -e \"const p=require\\('@babel/parser'\\);p.parse\\(require\\('fs'\\).readFileSync\\('src/CircuitSimulator.jsx','utf8'\\),{sourceType:'module',plugins:['jsx']}\\);p.parse\\(require\\('fs'\\).readFileSync\\('src/sim.js','utf8'\\),{sourceType:'module',plugins:['jsx']}\\);console.log\\('OK'\\)\")",
-      "Bash(node --input-type=module *)",
-      "Bash(node -e ' *)",
-      "Bash(node -e \"const p=require\\('@babel/parser'\\);for\\(const f of ['src/CircuitSimulator.jsx','src/sim.js','src/challenges.js']\\){p.parse\\(require\\('fs'\\).readFileSync\\(f,'utf8'\\),{sourceType:'module',plugins:['jsx']}\\);}console.log\\('parse OK'\\)\")",
-      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/CircuitSimulator.jsx','utf8'\\),{sourceType:'module',plugins:['jsx']}\\);console.log\\('parse OK'\\)\")",
-      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/CircuitSimulator.jsx','utf8'\\),{sourceType:'module',plugins:['jsx']}\\);require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/challenges.js','utf8'\\),{sourceType:'module',plugins:['jsx']}\\);console.log\\('parse OK'\\)\")",
-      "Bash(grep -q \"built in\\\\|error during build\\\\|Error:\" \"C:\\\\Users\\\\Maxime\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Maxime-OneDrive---EDUETATFR-Projets-circuit-simulator\\\\77053d5d-3245-4234-ab93-0a18d191fe9b\\\\tasks\\\\bnkrpbzxg.output\")",
-      "Bash(tail -3 \"C:\\\\Users\\\\Maxime\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Maxime-OneDrive---EDUETATFR-Projets-circuit-simulator\\\\77053d5d-3245-4234-ab93-0a18d181f7c6\\\\tasks\\\\bnkrpbzxg.output\")"
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(sed *)",
+      "Bash(grep *)",
+      "Bash(mkdir *)",
+      "Bash(cat *)",
+      "Bash(rm *)",
+      "Bash(wc *)",
+      "Bash(echo *)",
+      "Bash(ls *)",
+      "Bash(until *)",
+      "Bash(tail *)",
+      "Bash(head *)",
+      "Bash(mv *)",
+      "Bash(cp *)",
+      "Bash(git *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(find *)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep"
     ]
   }
 }

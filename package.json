@@ -8,11 +8,14 @@
   "description": "Logix — simulateur de circuits logiques pour cours d'OC informatique (gymnase)",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "parse-check": "node -e \"require('@babel/parser').parse(require('fs').readFileSync('src/CircuitSimulator.jsx','utf8'), {sourceType:'module', plugins:['jsx']}); console.log('OK')\"",
-    "test": "node tests/run.mjs",
-    "test:coverage": "c8 --include=src/sim.js --include=src/persist.js --reporter=text --reporter=html node tests/run.mjs"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "lucide-react": "^0.456.0",
@@ -20,12 +23,25 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@babel/parser": "^7.26.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.1",
+    "@types/react": "^18.3.29",
+    "@types/react-dom": "^18.3.7",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
+    "@typescript-eslint/parser": "^8.60.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^4.1.7",
     "autoprefixer": "^10.4.20",
-    "c8": "^11.0.0",
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
     "postcss": "^8.4.49",
+    "prettier": "^3.8.3",
     "tailwindcss": "^3.4.15",
-    "vite": "^5.4.11"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.0",
+    "vite": "^5.4.11",
+    "vitest": "^4.1.7"
   }
 }

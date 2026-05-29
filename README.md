@@ -24,9 +24,16 @@ Le dossier `dist/` contient les fichiers statiques à déployer sur n'importe qu
 
 ## Structure du projet
 
-- `src/CircuitSimulator.jsx` — TOUT le code de l'app (un seul fichier par choix de design)
-- `src/main.jsx` — point d'entrée React
-- `src/index.css` — Tailwind base
+App **React 18 + Vite + TypeScript**, code modulaire :
+
+- `src/CircuitSimulator.tsx` — orchestrateur : état, handlers, composition du rendu
+- `src/main.tsx` — point d'entrée React
+- `src/domain/` — types du domaine
+- `src/lib/` — logique pure sans React (simulation, persistance, géométrie, constantes)
+- `src/gates/` — définitions des composants par catégorie (`io/logic/bus/arith/sequential/display`), agrégées dans `index.tsx`, + résolution (`getDef`, `simulate`)
+- `src/components/` — composants d'interface (barre d'outils, canevas, panneaux, modales…)
+- `src/hooks/` — hooks d'état réutilisables (historique, autosave, moteur, chronogramme…)
+- `tests/` — tests de logique pure (Vitest) : sim, géométrie, bits, registre, persistance
 - `CLAUDE.md` — contexte projet pour Claude Code (lis-le avant de bosser dessus avec un assistant)
 - `ROADMAP.md` — phases passées et à venir
 
@@ -54,15 +61,18 @@ Phases terminées :
 
 À venir : petit processeur pédagogique (PC, ALU, mémoire, jeu d'instructions minimal).
 
-## Test logique rapide
-
-Le simulateur a un mode parse-check pour vérifier que le fichier reste syntaxiquement valide :
+## Qualité du code
 
 ```bash
-npm run parse-check
+npm run typecheck     # vérification des types (tsc)
+npm run lint          # ESLint
+npm run format        # Prettier
+npm run test          # tests de logique pure (Vitest)
+npm run test:coverage # tests + rapport de couverture
+npm run build         # tsc + build de production
 ```
 
-Pour tester la logique pure (sans React), extraire les fonctions dans un fichier `.mjs` et lancer avec `node`.
+La logique pure (simulation, masquage de bits, géométrie, résolution des définitions, persistance) est couverte par Vitest dans `tests/` — qui importent la **vraie** `GATES` de `src/gates` (≈ 95 % sur `src/lib`). Le rendu React se vérifie visuellement dans le navigateur.
 
 ## Déploiement GitHub Pages
 

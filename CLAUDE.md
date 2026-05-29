@@ -11,69 +11,106 @@ Simulateur de circuits logiques de type Logisim destiné à des élèves d'OC in
 
 ## Stack et organisation
 
-- **React 18 + Vite + JSX pur** (pas de TypeScript)
-- **Tailwind CSS** pour le style
-- **lucide-react** pour les icônes
-- **IBM Plex Sans + Mono** chargées via Google Fonts dans `index.html`
-- Tout le code applicatif est dans **un seul fichier** : `src/CircuitSimulator.jsx` (~3800 lignes). C'est intentionnel — un fichier unique se navigue très bien avec un `grep -n` et évite la dispersion des décisions. Ne pas découper en multiples fichiers sans raison forte.
-- Le fichier exporte par défaut le composant `CircuitSimulator`. `src/main.jsx` le monte.
+- **React 18 + Vite + TypeScript** (Tailwind CSS, lucide-react, IBM Plex Sans + Mono via Google Fonts).
+- **Vitest** pour les tests de logique pure, **ESLint** (flat config) + **Prettier** pour le style.
+- Le code est **modulaire et entièrement TypeScript** : la logique pure, les composants UI et les hooks sont séparés. L'orchestrateur `src/CircuitSimulator.tsx` ne fait plus que tenir l'état, les handlers, et composer les composants. `src/main.tsx` le monte.
+
+> `tsconfig` est en mode `strict`. Tout `src/` est en `.ts`/`.tsx` (plus aucun `.js`), vérifié par `tsc`. Les seuls `.mjs` sont les tests dans `tests/`.
+
+### Carte des fichiers
+
+```
+src/
+  main.tsx                 montage React
+  CircuitSimulator.tsx     ORCHESTRATEUR : état, handlers, composition du rendu
+  domain/
+    types.ts               types du domaine (Circuit, CircuitComponent, Wire,
+                           ResolvedDef, Selection, SimResult, Prefs côté lib…)
+  lib/                     logique pure & utilitaires, SANS React :
+    sim.ts                 simulate(), stepSequential(), asInt, maskTo, portKey,
+                           applyOrientation, SEG7_HEX_TABLE
+    persist.ts             serialize/deserialize (+ …All), FORMAT_VERSION
+    geometry.ts            routeWire, pointsToStr, offsetManhattan, makeBusTracks,
+                           uprightTransform, widthForBits, addrBitsFor, roundedRectPath
+    constants.ts           GRID, PORT_R, STORAGE_KEY, PALETTE_ORDER, DEFAULT_PREFS…
+    bits.ts, storage.ts    formatBitsGrouped ; adaptateur de stockage
+  challenges.ts            données des niveaux (typées) + getLevel/getAllLevels
+  gates/                   définitions des composants primitifs :
+    types.ts               interfaces GateDef / DynamicGeometry
+    shared.tsx             helpers de rendu partagés (bitCells, seg7Layout)
+    io / logic / bus /     défs par catégorie (Record<string, GateDef>)
+    arith / sequential / display
+    index.tsx              agrège les catégories → `export const GATES`
+    registry.tsx           getDef, buildCustomDef, typeReferences, getPortPosition,
+                           getPortWidth, et le wrapper simulate(circuit)
+  components/              présentation (.tsx) :
+    Toolbar, TabsBar, TabButton, PalettePanel, PaletteItem, ChallengePanel,
+    ChallengeBanner, CircuitCanvas, RightPanel, PropertiesPanel, TruthTablePanel,
+    ChronogramPanel, PreferencesPanel, BusWidthControl, HoverTooltip,
+    SaveAsComponentModal, DeleteDefinitionModal, ui.tsx
+    properties/            sections de PropertiesPanel (RamSection, LedMatrixSection)
+  hooks/                   logique d'état réutilisable :
+    usePrefs, useTrace, useCircuitEngine, useHistory, useAutosave,
+    useViewport, useKeyboardShortcuts
+tests/                     Vitest (.mjs) : sim-core (importe la VRAIE GATES),
+                           geometry, bits, registry, run.test (logique + persist)
+```
 
 ## Comment développer
 
 ```bash
 npm install
-npm run dev    # http://localhost:5173
+npm run dev        # http://localhost:5173
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint .
+npm run format     # prettier --write
+npm run test          # vitest run
+npm run test:coverage # vitest run --coverage (rapport text + html)
+npm run build         # tsc --noEmit && vite build
 ```
 
-Vérifier le parse après chaque grosse édition :
+Après une édition non triviale, **lancer `npm run build`** (il enchaîne `tsc` strict puis le bundle) et `npm run lint`. Le typage attrape la plupart des régressions de logique ; le rendu, lui, se vérifie **visuellement dans le navigateur** (cf. ci-dessous).
 
-```bash
-node -e "require('@babel/parser').parse(require('fs').readFileSync('src/CircuitSimulator.jsx','utf8'), {sourceType:'module', plugins:['jsx']})"
-```
-
-(Installer `@babel/parser` en dev si besoin : `npm i -D @babel/parser`.)
-
-Pour tester la logique pure (simulation, parsing, conversions de bits) sans React : extraire les fonctions concernées dans un `.mjs` temporaire et le lancer avec `node`. Voir `docs/test-examples.md` pour le pattern.
+La logique pure (`simulate`, masking, conversions de bits, géométrie, résolution de défs) est testée avec Vitest (`tests/`), sans React. **Les tests importent la VRAIE `GATES` de `src/gates`** (pas une copie) : toute modif d'une porte (ports, `fn`, géométrie) est donc gardée. `src/lib` est couvert à ~95 %. Le rendu React (composants/hooks) n'est pas testé — il se vérifie à l'œil dans le navigateur.
 
 ## Architecture interne
 
-Une seule grosse structure de données : l'objet **`GATES`** au début du fichier. Il contient TOUS les composants primitifs (portes, INPUT, OUTPUT, SPLITTER, MERGER, MUX, DEMUX, DECODER, DFF, CLOCK). Chaque entrée a la même forme :
+L'objet **`GATES`** (`src/gates/index.tsx`) agrège TOUS les composants primitifs, répartis par catégorie dans `gates/io|logic|bus|arith|sequential|display.tsx` (portes, INPUT, OUTPUT, SPLITTER, MERGER, MUX, DEMUX, DECODER, DFF, CLOCK, REG, COUNTER, RAM, SRLATCH, SEG7, LEDMATRIX, ADDER…). Chaque entrée a la même forme :
 
-```js
+```ts
 TYPE: {
   label, category, w, h,
   inputs:  [{name, x, y, width}],
   outputs: [{name, x, y, width}],
   defaultState: {…},
   getDynamicGeometry: (comp) => ({w, h, inputs, outputs}),  // optionnel
-  shape: (comp, outputValue, inputValue) => <>…</>,
+  shape: (comp, outputValue, inputValue, inputsByName, angle) => <>…</>,
   fn: (ins) => [outs],  // optionnel — sinon traité dans simulate()
 }
 ```
 
-Quand un composant a une géométrie qui dépend de son état (bus, splitter à N sorties, MUX à 2^N voies), il fournit `getDynamicGeometry`. `getDef(type, customDefs, comp)` fusionne la def statique avec la géométrie dynamique. **Toujours passer `comp` à `getDef` quand on l'a sous la main**, sinon les ports renvoyés correspondent au `defaultState` (utile uniquement pour les aperçus de palette).
+Quand un composant a une géométrie dépendant de son état (bus, splitter à N sorties, MUX à 2^N voies), il fournit `getDynamicGeometry`. `getDef(type, customDefs, comp)` (dans `gates/registry.tsx`) fusionne la def statique avec la géométrie dynamique. **Toujours passer `comp` à `getDef` quand on l'a sous la main**, sinon les ports renvoyés correspondent au `defaultState` (utile uniquement pour les aperçus de palette).
 
-**Le simulateur** (`simulate(circuit)`) est purement combinatoire : tri topologique de Kahn sur le graphe des fils, puis évaluation. Toutes les valeurs sont des **entiers** (les buses sont des `Number` avec masquage `maskTo(width, v)`). Les DFF/CLOCK sont traités comme des sources (sortie = `state.q` ou `state.value`), donc le graphe reste acyclique.
+**Le simulateur** (`simulate(circuit, getDef)` dans `lib/sim.ts`, exposé via le wrapper `simulate(circuit)` de `gates/registry.tsx`) est purement combinatoire : tri topologique de Kahn sur le graphe des fils, puis évaluation. Toutes les valeurs sont des **entiers** (les bus sont des `Number` masqués par `maskTo(width, v)`). Les DFF/CLOCK sont traités comme des sources (sortie = `state.q` ou `state.value`), donc le graphe reste acyclique.
 
-**La logique séquentielle** vit dans un `useEffect` séparé qui :
-1. Lit `sim.inputValues` pour chaque DFF (les valeurs combinatoires sur D, CLK, RST)
-2. Compare `state.lastClk` à la valeur courante sur CLK
-3. Si front montant détecté (`lastClk=0 && CLK=1`), capture D dans Q
-4. Si RST=1, force Q=0 (asynchrone, prioritaire sur la capture)
-5. Met à jour tous les DFF en un seul `setCircuit` → **atomicité** garantie pour les shift registers
+**La logique séquentielle et temporelle** vit dans `hooks/useCircuitEngine.ts` :
 
-Une horloge auto-running utilise un autre `useEffect` avec un `setInterval` à 30ms qui bascule les CLOCK ayant `state.running=true`.
+1. `stepSequential(circuit, getDef)` lit les valeurs combinatoires (D, CLK, RST…) et met à jour TOUS les composants à mémoire en un seul `setCircuit` → **atomicité** garantie pour les registres à décalage. Le front montant se détecte en comparant `state.lastClk` à la valeur courante de CLK ; RST=1 force Q=0 (asynchrone, prioritaire).
+2. Une horloge auto-running : un `setInterval` (30 ms) bascule les CLOCK `state.running=true` selon leur fréquence.
+3. Un `setInterval` (60 ms) force un re-render pour animer le halo du D-FF.
 
-**Le rendu des fils bus** utilise `makeBusTracks(points, n, pitch)` qui appelle `offsetManhattan(points, offset)` pour chaque piste. Les premiers et derniers sommets restent fixes : les pistes convergent en éventail aux ports.
+Le **chronogramme** est géré par `hooks/useTrace.ts`, l'**historique par onglet** (undo/redo + `commit`) par `hooks/useHistory.ts`, l'**autosave** par `hooks/useAutosave.ts`, le **zoom/pan** par `hooks/useViewport.ts`, les **raccourcis clavier** par `hooks/useKeyboardShortcuts.ts`, les **préférences** par `hooks/usePrefs.ts`.
+
+**Le rendu du canevas** (`components/CircuitCanvas.tsx`) dessine la grille, les fils, les composants et les ports ; c'est un composant présentationnel piloté par les props/handlers de l'orchestrateur. **Le rendu des fils bus** utilise `makeBusTracks(points, n, pitch)` qui appelle `offsetManhattan(points, offset)` pour chaque piste — les premiers/derniers sommets restent fixes, les pistes convergent en éventail aux ports.
 
 ## Conventions de code
 
 - **Pas de booléens dans le simulateur.** Tout est entier. `asInt(v)` normalise (booléens, undefined, null → 0/1).
-- **Patte d'oie de l'historique** : `commit(updater)` pour les changements structurels (placement, câblage, suppression), `setCircuit(updater)` pour les changements interactifs (toggle d'une entrée, tick d'horloge). Ce sont les seuls deux moyens de muter le circuit.
-- **Pas de fragments orphelins.** Toujours `e.stopPropagation()` quand un clic ne doit pas bouilloter au canevas.
-- **Test du parser après toute édition de structure.** Un parse cassé bloque tout le rendu.
-- **Toujours `view` le fichier avant `str_replace`** (le fichier change, et les indentations matter).
-- **Aux dégradés silencieux** : `maskTo(width, …)` est sûr pour width ≥ 32 (renvoie `v|0`, signé 32 bits). Au-delà de 32 bits, on n'est pas garanti.
+- **Patte d'oie de l'historique** : `commit(updater)` (via `useHistory`) pour les changements structurels (placement, câblage, suppression), `setCircuit(updater)` pour les changements interactifs (toggle d'une entrée, tick d'horloge). Ce sont les seuls deux moyens de muter le circuit.
+- **Logique pure typée et testée** : tout ce qui ne dépend pas de React va dans `lib/` ou `gates/`, en `.ts(x)` strict, avec un test Vitest si c'est faisable sans React.
+- **Pas de fragments orphelins.** Toujours `e.stopPropagation()` quand un clic ne doit pas remonter au canevas.
+- **Vérifier `npm run build` + `npm run lint`** après une édition de structure.
+- **Aux dégradés silencieux** : `maskTo(width, …)` est sûr pour width ≤ 32 (renvoie `v|0`, signé 32 bits). Au-delà de 32 bits, on n'est pas garanti.
 
 ## État des phases
 
@@ -87,25 +124,25 @@ Voir `ROADMAP.md` pour le détail. Très brièvement :
 
 ## Pièges connus
 
-- **`getDef(type, customDefs)` sans comp** renvoie la def avec le `defaultState`. Ça marche pour les aperçus, **pas** pour la simulation ou le rendu d'un composant réel. Toujours passer `comp` quand disponible.
-- **Les fils orphelins** après changement de largeur sont nettoyés par `updateComponent` via le flag `_dropMismatchedWires: true` dans le patch. Si tu ajoutes un nouveau type de composant à géométrie variable, pense à ce flag dans son sélecteur de largeur.
-- **`requestAnimationFrame` non utilisé.** L'animation du halo DFF passe par un `setInterval(60ms)` qui force un re-render via `forceTick`. C'est pas optimal mais ça reste cheap (sim mémoïsé sur `circuit`).
-- **L'éditeur de composant custom** entre en `editMode` et travaille sur un circuit séparé. Au commit, il reconstruit la définition. Le banner ambré indique le mode édition.
-- **Le toggle 1-bit d'une INPUT** passe par `toggleInput`. Le clic sur un bit d'INPUT bus passe par `toggleInputBit(id, bitIdx)`. La détection du bit cliqué se fait géométriquement (position locale ÷ `INPUT_BUS_CELL_SIZE`).
+- **`getDef(type, customDefs)` sans comp** renvoie la def avec le `defaultState`. OK pour les aperçus, **pas** pour la simulation/le rendu d'un composant réel. Toujours passer `comp` quand disponible.
+- **Les fils orphelins** après changement de largeur sont nettoyés par `updateComponent` via le flag `_dropMismatchedWires: true` dans le patch. Si tu ajoutes un composant à géométrie variable, pense à ce flag dans son sélecteur de largeur.
+- **L'éditeur de composant custom** entre en `editMode` et travaille sur un circuit séparé ; au commit il reconstruit la définition. Le banner ambré indique le mode édition. L'autosave est suspendu pendant l'édition.
+- **Le toggle 1-bit d'une INPUT** passe par `toggleInput`. Le clic sur un bit d'INPUT bus passe par `toggleInputBit(id, bitIdx)` ; la détection du bit cliqué est géométrique (position locale ÷ `INPUT_BUS_CELL_SIZE`).
+- **Refs lues en rendu** (curseur du canevas, aperçu de câblage, ref-getter d'historique) : intentionnel. Les règles ESLint « React Compiler » correspondantes (`react-hooks/refs`, `react-hooks/immutability`, `react-hooks/set-state-in-effect`) sont désactivées dans `eslint.config.js` avec justification.
 
 ## Quand ajouter un nouveau composant
 
-1. Ajouter une entrée dans `GATES` avec `label`, `category`, ports, `defaultState`, `shape`, et soit `fn` (combinatoire pure) soit gestion explicite dans `simulate()`.
+1. Ajouter une entrée dans le **fichier de catégorie** adapté (`src/gates/io|logic|bus|arith|sequential|display.tsx`) : `label`, `category`, ports, `defaultState`, `shape`, et soit `fn` (combinatoire pure) soit gestion explicite dans `simulate()` (`lib/sim.ts`). `index.tsx` l'agrège automatiquement. Ajouter aussi un cas dans les tests (`tests/run.test.mjs`) qui valident la vraie `GATES`.
 2. Si géométrie variable : ajouter `getDynamicGeometry(comp)`.
-3. Ajouter le type dans `PALETTE_ORDER`.
-4. Si nouvelle catégorie de palette : ajouter une section dans le JSX de la palette (cherche `category === 'Bus'` pour le pattern).
-5. Si propriétés configurables : ajouter un bloc dans `PropertiesPanel`. Pour la largeur de bus, réutiliser `<BusWidthControl />`.
-6. Si état évolutif (comme DFF) : ajouter un `useEffect` ou compléter celui qui existe.
-7. Test parse + ouvrir l'app + placer le composant + tester ses bornes.
+3. Ajouter le type dans `PALETTE_ORDER` (`lib/constants.ts`).
+4. La palette (`components/PalettePanel.tsx`) groupe par `category` automatiquement ; une nouvelle catégorie n'a qu'à exister dans `GATES` et `PALETTE_ORDER`.
+5. Si propriétés configurables : ajouter un bloc dans `components/PropertiesPanel.tsx` (ou une section dédiée dans `components/properties/` si c'est un gros éditeur, cf. RAM/LEDMATRIX). Pour la largeur de bus, réutiliser `<BusWidthControl />`.
+6. Si état séquentiel (comme DFF) : compléter `stepSequential` (`lib/sim.ts`) et, au besoin, `useCircuitEngine`.
+7. `npm run build` + ouvrir l'app + placer le composant + tester ses bornes.
 
 ## Quand tu hésites
 
-- **« Faut-il splitter ce gros fichier ? »** Non. La navigation par `grep -n` et `view` avec ranges est plus rapide que parcourir 10 fichiers.
-- **« Faut-il ajouter une dépendance ? »** Probablement pas. Tailwind, lucide-react, React. C'est tout. Tout le reste se fait en JS pur.
-- **« Faut-il rajouter du TypeScript ? »** Non, pas demandé, ajouterait beaucoup de bruit pour peu de valeur sur un fichier unique.
-- **« Comment tester du React ? »** Visuellement, dans le navigateur. Pas de Jest, pas de Vitest pour l'instant. La logique pure (simulate, masking) se teste en `.mjs` standalone.
+- **« Où mettre ce code ? »** Logique pure → `lib/`. Définition/résolution de composant → `gates/`. État réutilisable → un `hook`. Présentation → `components/`. L'orchestrateur ne garde que l'état partagé et la composition.
+- **« Faut-il ajouter une dépendance ? »** Probablement pas. React, Tailwind, lucide-react. Le reste se fait en TS pur.
+- **« Comment tester ? »** Logique pure → Vitest. Rendu/interaction React → visuellement dans le navigateur (je ne peux pas le vérifier moi-même : signale-le si tu ne peux pas tester l'UI).
+- **« Puis-je continuer à découper l'orchestrateur ? »** Oui — c'est la direction. Extraire vers `components/` (rendu) ou `hooks/` (état), en gardant `tsc`/`vitest`/`build` verts à chaque étape.
