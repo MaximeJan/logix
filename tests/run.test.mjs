@@ -1460,6 +1460,44 @@ test('récursion bloquée : custom qui se réfère à lui-même', () => {
 });
 
 // =====================================================================
+// 15b. stepSequential : stabilité de référence (anti-boucle de re-render)
+// useCircuitEngine s'appuie sur `next === circuit` pour ne PAS re-rendre en
+// boucle. Si stepSequential renvoyait toujours un nouveau tableau, l'effet
+// séquentiel se redéclencherait sans fin et figerait l'horloge auto.
+// =====================================================================
+suite('stepSequential : stabilité de référence');
+
+test('circuit combinatoire stable → même référence', () => {
+  const i = makeInput(1, 1);
+  const o = makeOutput(1);
+  const c = { components: [i, o], wires: [makeWire(i, o, 'out', 'in0')], customDefinitions: {} };
+  assertTrue(stepSequential(c) === c, 'doit renvoyer la même référence si rien ne change');
+});
+
+test('CLOCK running stable → même référence', () => {
+  const clk = { id: tid('clk'), type: 'CLOCK', x: 0, y: 0, state: { value: 0, running: true, freq: 1, lastToggleAt: 0 } };
+  const c = { components: [clk], wires: [], customDefinitions: {} };
+  assertTrue(stepSequential(c) === c, 'une horloge seule ne doit pas générer de nouveau circuit');
+});
+
+test('DFF qui capture sur front montant → nouvelle référence', () => {
+  const inp = makeInput(1, 1);
+  const clk = { id: tid('clk'), type: 'CLOCK', x: 0, y: 0, state: { value: 1 } };
+  const dff = { id: tid('dff'), type: 'DFF', x: 0, y: 0, state: { q: 0, lastClk: 0, width: 1 } };
+  const c = {
+    components: [inp, clk, dff],
+    wires: [
+      makeWire(inp, dff, 'out', 'D'),
+      makeWire(clk, dff, 'CLK', 'CLK'),
+    ],
+    customDefinitions: {},
+  };
+  const next = stepSequential(c);
+  assertTrue(next !== c, 'un changement doit produire un nouveau circuit');
+  assertEq(asInt(next.components.find((x) => x.id === dff.id).state.q), 1, 'Q capture D=1');
+});
+
+// =====================================================================
 // 16. ROTATION : applyOrientation
 // =====================================================================
 suite('rotation : applyOrientation');

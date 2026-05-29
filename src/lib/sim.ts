@@ -416,5 +416,10 @@ export function stepSequential(circuit: Circuit, getDef: GetDef): Circuit {
     }
     return comp;
   });
-  return { ...circuit, components: newComponents };
+  // Renvoie la MÊME référence si aucun composant n'a changé : `.map` produit
+  // toujours un nouveau tableau, mais ses éléments restent identiques quand rien
+  // ne bouge. Sans ce court-circuit, l'appelant (useCircuitEngine) croit qu'il y a
+  // un changement à chaque passe → boucle de re-render qui fige l'horloge auto.
+  const changed = newComponents.some((c, i) => c !== circuit.components[i]);
+  return changed ? { ...circuit, components: newComponents } : circuit;
 }
