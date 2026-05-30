@@ -144,7 +144,7 @@ Voir `ROADMAP.md` pour le détail. Très brièvement :
 - **1-3** : Portes 1-bit, persistance JSON, undo/redo, composants personnalisés (encapsulation) — fait
 - **4** : Bus multi-bits 1-32, ribbon visuel, MUX/DEMUX/DECODER reconfigurables — fait
 - **5a** : Bascule D (1-bit ou N-bit registre), horloge manuelle + auto, capture sur front montant — fait
-- **5b** : SR latch, JK/T flip-flop, registres explicites, RAM — à faire
+- **5b** : SR latch, registre N-bit avec LD, compteur N-bit, RAM, afficheur LED matrix — fait (JK/T flip-flop retirés du chemin critique)
 - **6** : Petit processeur (PC, mémoire, ALU, registres, jeu d'instructions minimal) — à faire
 
 ## Pièges connus

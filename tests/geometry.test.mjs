@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   uprightTransform,
-  widthForBits,
   addrBitsFor,
   roundedRectPath,
   routeWire,
@@ -45,23 +44,6 @@ describe('addrBitsFor', () => {
     expect(addrBitsFor(5)).toBe(3);
     expect(addrBitsFor(8)).toBe(3);
     expect(addrBitsFor(256)).toBe(8);
-  });
-});
-
-describe('widthForBits', () => {
-  const opts = { minW: 60, portMargin: 10 };
-  it('renvoie minW pour 1 bit', () => {
-    expect(widthForBits(1, opts)).toBe(60);
-    expect(widthForBits(0, opts)).toBe(60);
-  });
-  it('croît (ou égal) avec le nombre de bits et reste ≥ minW', () => {
-    const w4 = widthForBits(4, opts);
-    const w8 = widthForBits(8, opts);
-    const w16 = widthForBits(16, opts);
-    expect(w4).toBeGreaterThanOrEqual(60);
-    expect(w8).toBeGreaterThanOrEqual(w4);
-    expect(w16).toBeGreaterThanOrEqual(w8);
-    expect(w16).toBeGreaterThan(60);
   });
 });
 

@@ -58,6 +58,42 @@ interface RawData {
 let _defaultCounter = 0;
 const defaultUid = (prefix: string): string => `${prefix}_${(_defaultCounter++).toString(36)}`;
 
+// Valide/normalise les composants et fils bruts d'un onglet (ou d'un circuit
+// mono-onglet) : on ignore les composants au type inconnu, on génère les IDs
+// manquants, puis on ne garde que les fils dont les deux extrémités existent.
+// Partagé par `deserialize` (mono) et `deserializeAll` (multi) pour éviter la
+// duplication de cette logique sensible.
+function parseComponentsAndWires(
+  rawComponents: RawComponent[] | undefined,
+  rawWires: RawWire[] | undefined,
+  known: (type: string) => boolean,
+  uid: (prefix: string) => string,
+): { components: CircuitComponent[]; wires: Wire[] } {
+  const validIds = new Set<string>();
+  const components: CircuitComponent[] = [];
+  for (const c of rawComponents ?? []) {
+    if (!known(c.type)) continue;
+    const comp: CircuitComponent = {
+      id: c.id ?? uid('c'),
+      type: c.type,
+      x: c.x ?? 0,
+      y: c.y ?? 0,
+      state: c.state ?? undefined,
+      label: c.label ?? '',
+    };
+    validIds.add(comp.id);
+    components.push(comp);
+  }
+  const wires: Wire[] = (rawWires ?? [])
+    .filter((w: RawWire) => validIds.has(w.from.componentId) && validIds.has(w.to.componentId))
+    .map((w: RawWire) => ({
+      id: w.id ?? uid('w'),
+      from: { componentId: w.from.componentId, port: w.from.port },
+      to: { componentId: w.to.componentId, port: w.to.port },
+    }));
+  return { components, wires };
+}
+
 const serializeComponent = (c: CircuitComponent) => ({
   id: c.id,
   type: c.type,
@@ -74,6 +110,8 @@ const serializeWire = (w: Wire) => ({
 });
 
 // --------- Sérialisation d'un circuit individuel ---------
+// NB : l'application n'utilise que `serializeAll`/`deserializeAll` (multi-onglets).
+// `serialize` est conservé pour la symétrie d'API et le round-trip testé en Vitest.
 export function serialize(circuit: Circuit) {
   return {
     version: FORMAT_VERSION,
@@ -98,29 +136,7 @@ export function deserialize(
   // Type connu = type natif ou type défini dans customDefinitions
   const known = (t: string) => isKnownType(t) || !!customDefinitions[t];
 
-  const validIds = new Set<string>();
-  const components: CircuitComponent[] = [];
-  for (const c of data.components ?? []) {
-    if (!known(c.type)) continue;
-    const comp: CircuitComponent = {
-      id: c.id ?? uid('c'),
-      type: c.type,
-      x: c.x ?? 0,
-      y: c.y ?? 0,
-      state: c.state ?? undefined,
-      label: c.label ?? '',
-    };
-    validIds.add(comp.id);
-    components.push(comp);
-  }
-
-  const wires: Wire[] = (data.wires ?? [])
-    .filter((w: RawWire) => validIds.has(w.from.componentId) && validIds.has(w.to.componentId))
-    .map((w: RawWire) => ({
-      id: w.id ?? uid('w'),
-      from: { componentId: w.from.componentId, port: w.from.port },
-      to: { componentId: w.to.componentId, port: w.to.port },
-    }));
+  const { components, wires } = parseComponentsAndWires(data.components, data.wires, known, uid);
 
   return {
     name: data.name ?? 'circuit',
@@ -172,28 +188,12 @@ export function deserializeAll(raw: unknown, opts: PersistOptions = {}): TabsSta
   const customDefinitions = data.customDefinitions ?? {};
   const known = (t: string) => isKnownType(t) || !!customDefinitions[t];
   const tabs: Tab[] = (data.tabs ?? []).map((rawTab: RawTab) => {
-    const validIds = new Set<string>();
-    const components: CircuitComponent[] = [];
-    for (const c of rawTab.components ?? []) {
-      if (!known(c.type)) continue;
-      const comp: CircuitComponent = {
-        id: c.id ?? uid('c'),
-        type: c.type,
-        x: c.x ?? 0,
-        y: c.y ?? 0,
-        state: c.state ?? undefined,
-        label: c.label ?? '',
-      };
-      validIds.add(comp.id);
-      components.push(comp);
-    }
-    const wires: Wire[] = (rawTab.wires ?? [])
-      .filter((w: RawWire) => validIds.has(w.from.componentId) && validIds.has(w.to.componentId))
-      .map((w: RawWire) => ({
-        id: w.id ?? uid('w'),
-        from: { componentId: w.from.componentId, port: w.from.port },
-        to: { componentId: w.to.componentId, port: w.to.port },
-      }));
+    const { components, wires } = parseComponentsAndWires(
+      rawTab.components,
+      rawTab.wires,
+      known,
+      uid,
+    );
     return {
       id: rawTab.id ?? uid('tab'),
       name: rawTab.name ?? 'Nouveau circuit',
