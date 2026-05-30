@@ -28,17 +28,15 @@ Sortie bus : conserve son affichage texte avec sélecteur dec/hex/bin.
 
 Architecture : `simulate()` reste pure, le DFF est traité comme une source dont la sortie = `state.q`. Un `useEffect` séparé détecte les fronts montants en comparant `state.lastClk` au CLK courant, et met à jour tous les DFF en lot — atomicité garantie pour les shift registers.
 
-## ⏳ Phase 5b — Suite séquentielle (en cours)
+## ✅ Phase 5b — Suite séquentielle (terminée)
 
 **Faits :**
 
 1. ✅ **SR latch** (composant primitif) — mémoire asynchrone S/R, R prioritaire en cas de conflit. 1-bit fixe.
 2. ✅ **RAM** — lecture asynchrone (DATA_OUT = mem[ADDR]), écriture synchrone sur front montant de CLK si WE=1. Dimensions configurables : 1-8 bits d'adresse (2-256 cases), 1-16 bits par mot. Édition cellule par cellule dans le panneau, grille cliquable bit par bit, ligne ADDR courante surlignée. Contenu persisté dans le JSON.
 3. ✅ **Registre N-bit avec LD** — Q ← D sur front montant uniquement si LD=1, sinon hold. Largeur 1-32. Comportement plus pédagogique que le D-FF en mode bus, qui capture sans condition.
-
-**À faire :**
-
-4. **Compteur N-bit** — Q ← Q+1 sur front montant si EN=1, sinon hold. RST asynchrone force Q=0. Largeur 1-32. Sera le futur PC du CPU.
+4. ✅ **Compteur N-bit** — Q ← Q+1 sur front montant si EN=1, sinon hold. RST asynchrone force Q=0. Largeur 1-32. Sera le futur PC du CPU.
+5. ✅ **Afficheur LED matrix** — écriture synchrone d'un pixel (X, Y, D) sur front montant si WE=1 ; RST asynchrone éteint tous les pixels. Dimensions configurables.
 
 **Retiré du chemin critique** (peu utile pour la phase 6) :
 

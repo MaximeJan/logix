@@ -1,6 +1,5 @@
 // Helpers géométriques purs : rotation de labels, tracé de fils manhattan,
 // pistes parallèles pour les bus, et dimensionnement des composants à mémoire.
-import { formatBitsGrouped } from './bits';
 
 export type Point = [number, number];
 
@@ -20,20 +19,6 @@ export function uprightTransform(
 ): string | undefined {
   if (!angle) return undefined;
   return `rotate(${-angle} ${x} ${y})`;
-}
-
-// Largeur minimale d'un composant à mémoire (DFF / REG / COUNTER / ADDER…) selon
-// la largeur du bus stocké : marge boîtier + cadre LED assez large pour la valeur
-// binaire groupée (≈ 9,5 px/caractère mono à fontSize 14).
-export function widthForBits(
-  bitWidth: number,
-  { minW, portMargin }: { minW: number; portMargin: number },
-): number {
-  if (bitWidth <= 1) return minW;
-  const text = formatBitsGrouped(0, bitWidth);
-  const lcdInner = Math.ceil(text.length * 9.5 + 20);
-  const lcdMargin = 10; // gap entre le cadre LED et la zone des labels port
-  return Math.max(minW, lcdInner + 2 * (portMargin + lcdMargin));
 }
 
 // Nombre de bits nécessaires pour adresser `n` cases (au moins 1, même pour n=1).

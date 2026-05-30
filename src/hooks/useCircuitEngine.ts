@@ -31,8 +31,16 @@ export function useCircuitEngine(
     setCircuit((c) => ({ ...c, components }));
   }, [circuit, sim, setCircuit]);
 
+  // Présence de composants temporels : sert à n'armer les timers que lorsqu'ils
+  // ont quelque chose à animer (sinon un circuit statique re-render en continu).
+  const hasRunningClock = circuit.components.some(
+    (c) => c.type === 'CLOCK' && c.state?.running,
+  );
+  const hasDff = circuit.components.some((c) => c.type === 'DFF');
+
   // 2. Auto-tick des CLOCK en mode running. Une seule timer pour toute l'app.
   useEffect(() => {
+    if (!hasRunningClock) return;
     const id = setInterval(() => {
       const now = Date.now();
       setCircuit((c) => {
@@ -56,12 +64,14 @@ export function useCircuitEngine(
       });
     }, 30);
     return () => clearInterval(id);
-  }, [setCircuit]);
+  }, [setCircuit, hasRunningClock]);
 
-  // 3. Re-render périodique pour animer le halo du D-FF (300 ms) et la pastille CLOCK.
+  // 3. Re-render périodique pour animer le halo du D-FF (300 ms) et la pastille
+  // CLOCK. Inutile (et coûteux) tant qu'aucun D-FF ni horloge active n'est présent.
   const [, forceTick] = useState(0);
   useEffect(() => {
+    if (!hasDff && !hasRunningClock) return;
     const id = setInterval(() => forceTick((n) => (n + 1) % 1000), 60);
     return () => clearInterval(id);
-  }, []);
+  }, [hasDff, hasRunningClock]);
 }

@@ -2,13 +2,9 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { Zap, Plus, Timer, Cpu, GitBranch } from 'lucide-react';
 import { getLevel, getAllLevels } from '../challenges';
 import { PaletteItem } from './PaletteItem';
+import type { ChallengeRow } from '../lib/challenge-verify';
 
-export interface ChallengeRow {
-  inVals: number[];
-  expectedOutVals: number[];
-  actualOutVals: number[];
-  match: boolean;
-}
+export type { ChallengeRow };
 
 export interface ChallengeMode {
   chapterId: string;

@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Package } from 'lucide-react';
-import { asInt, maskTo, portKey, stepSequential as stepSequentialCore } from './lib/sim';
+import { asInt, maskTo } from './lib/sim';
 import {
   serializeAll as serializeAllCore,
   deserializeAll as deserializeAllCore,
 } from './lib/persist';
 import { getLevel } from './challenges';
+import { verifyChallenge as verifyChallengeCore } from './lib/challenge-verify';
+import { buildCustomDefData } from './lib/custom-def';
 import { GRID, INPUT_BUS_CELL_SIZE } from './lib/constants';
 import { GATES } from './gates';
 import {
@@ -317,119 +319,13 @@ export default function CircuitSimulator() {
   };
 
   // -------- CHALLENGES --------
+  // La logique de vérification (pure) vit dans lib/challenge-verify ; ici on ne
+  // fait que résoudre le niveau courant et déléguer.
   const verifyChallenge = (): { success: boolean; error?: string; table?: ChallengeRow[] } => {
     if (!challengeMode) return { success: false, error: 'Pas en challenge' };
     const level = getLevel(challengeMode.chapterId, challengeMode.levelId);
     if (!level) return { success: false, error: 'Niveau non trouvé' };
-
-    // Récupère les INPUT/OUTPUT du circuit courant par ordre (ignore les labels)
-    const inputComps = circuit.components.filter((c) => c.type === 'INPUT');
-    const outputComps = circuit.components.filter((c) => c.type === 'OUTPUT');
-
-    // Vérifie que le nombre d'entrées/sorties correspond
-    if (inputComps.length < level.inputs.length) {
-      return {
-        success: false,
-        error: `Il faut ${level.inputs.length} entrée(s), trouvées ${inputComps.length}`,
-      };
-    }
-    if (outputComps.length < level.outputs.length) {
-      return {
-        success: false,
-        error: `Il faut ${level.outputs.length} sortie(s), trouvées ${outputComps.length}`,
-      };
-    }
-
-    // Utilise les N premiers INPUT et OUTPUT (ordre de création)
-    const inputIds = inputComps.slice(0, level.inputs.length).map((c) => c.id);
-    const outputIds = outputComps.slice(0, level.outputs.length).map((c) => c.id);
-
-    // Teste selon le type de vérification
-    if (level.verify.type === 'truthtable') {
-      const allRows: ChallengeRow[] = [];
-      const truthTable = level.truthTable ?? [];
-      for (let rowIdx = 0; rowIdx < truthTable.length; rowIdx++) {
-        const [inVals, expectedOutVals] = truthTable[rowIdx];
-
-        // Injecte les valeurs sur les INPUT
-        const testCircuit: Circuit = { ...circuit };
-        testCircuit.components = testCircuit.components.map((c) => {
-          const inputIdx = inputIds.indexOf(c.id);
-          if (inputIdx >= 0) {
-            return { ...c, state: { ...(c.state ?? {}), value: inVals[inputIdx] } };
-          }
-          return c;
-        });
-
-        // Simule
-        const sim2 = simulate(testCircuit);
-
-        // Lit les outputs
-        const actualOutVals: number[] = [];
-        for (const outId of outputIds) {
-          const val = sim2.inputValues.get(portKey(outId, 'in0')) ?? 0;
-          actualOutVals.push(val);
-        }
-
-        // Enregistre la ligne pour afficher la table complète
-        const match = expectedOutVals.every(
-          (exp: number, i: number) => (actualOutVals[i] ?? 0) === exp,
-        );
-        allRows.push({ inVals, expectedOutVals, actualOutVals, match });
-
-        if (!match) {
-          return { success: false, error: 'Table échouée', table: allRows };
-        }
-      }
-      return { success: true, table: allRows };
-    }
-
-    if (level.verify.type === 'sequence') {
-      let testCircuit: Circuit = { ...circuit };
-      // Reset DFF
-      testCircuit.components = testCircuit.components.map((c) => {
-        if (c.type === 'DFF') return { ...c, state: { ...(c.state ?? {}), q: 0 } };
-        return c;
-      });
-
-      const allSteps: ChallengeRow[] = [];
-      const steps = level.verify.steps ?? [];
-      for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
-        const [inVals, expectedOutVals] = steps[stepIdx];
-
-        // Inject inputs
-        testCircuit.components = testCircuit.components.map((c) => {
-          const inputIdx = inputIds.indexOf(c.id);
-          if (inputIdx >= 0) {
-            return { ...c, state: { ...(c.state ?? {}), value: inVals[inputIdx] } };
-          }
-          return c;
-        });
-
-        // Step
-        testCircuit = stepSequentialCore(testCircuit, getDef);
-
-        // Check outputs
-        const sim2 = simulate(testCircuit);
-        const actualOutVals: number[] = [];
-        for (const outId of outputIds) {
-          const val = sim2.inputValues.get(portKey(outId, 'in0')) ?? 0;
-          actualOutVals.push(val);
-        }
-
-        const match = expectedOutVals.every(
-          (exp: number, i: number) => (actualOutVals[i] ?? 0) === exp,
-        );
-        allSteps.push({ inVals, expectedOutVals, actualOutVals, match });
-
-        if (!match) {
-          return { success: false, error: 'Séquence échouée', table: allSteps };
-        }
-      }
-      return { success: true, table: allSteps };
-    }
-
-    return { success: false, error: 'Type de vérification inconnu' };
+    return verifyChallengeCore(circuit, level, getDef);
   };
 
   const toggleInput = (id: string) => {
@@ -708,33 +604,8 @@ export default function CircuitSimulator() {
       }
     }
 
-    // Sécurité : vérifier que les internalId des ports pointent toujours vers des composants présents
-    const validInputs = inputs.filter((p) => sourceComps.some((c) => c.id === p.id));
-    const validOutputs = outputs.filter((p) => sourceComps.some((c) => c.id === p.id));
-
-    // La largeur de chaque port externe est celle du composant INPUT/OUTPUT interne associé
-    const portWidthFor = (id: string) => {
-      const internal = sourceComps.find((c) => c.id === id);
-      return internal?.state?.width ?? 1;
-    };
-
-    const newDef = {
-      name: trimmed,
-      inputs: validInputs.map((p) => ({
-        name: p.name.trim(),
-        internalId: p.id,
-        width: portWidthFor(p.id),
-      })),
-      outputs: validOutputs.map((p) => ({
-        name: p.name.trim(),
-        internalId: p.id,
-        width: portWidthFor(p.id),
-      })),
-      circuit: {
-        components: sourceComps.map((c) => ({ ...c })),
-        wires: internalWires.map((w) => ({ ...w, from: { ...w.from }, to: { ...w.to } })),
-      },
-    };
+    // Construit la donnée de définition (pure) : ports valides, largeurs, clones.
+    const newDef = buildCustomDefData(trimmed, inputs, outputs, sourceComps, internalWires);
 
     if (editMode) {
       // === MODE ÉDITION ===
