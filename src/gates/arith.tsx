@@ -1,189 +1,102 @@
 // Définitions de composants — catégorie « arith ». Agrégées dans ./index.
+import type { CircuitComponent } from '../domain/types';
 import { asInt, maskTo } from '../lib/sim';
 import { formatBitsGrouped } from '../lib/bits';
-import { widthForBits } from '../lib/geometry';
-import { UprightText } from './UprightText';
+import { rectLayout } from './rectLayout';
+import { RectShape } from './RectShape';
 import type { GateDef } from './types';
+
+const LCD_FILL = 'var(--lcd-fill, #0f172a)';
+const LCD_BORDER = 'var(--lcd-border, #0f172a)';
+const LCD_TEXT = 'var(--lcd-text, #fbbf24)';
+const NO_SEL = { userSelect: 'none' as const, pointerEvents: 'none' as const };
+
+function adderLayout(comp?: CircuitComponent) {
+  const width = comp?.state?.width ?? 4;
+  const fmtLen = formatBitsGrouped(0, width).length;
+  const contentW = Math.max(46, fmtLen * 9 + 14);
+  return rectLayout({
+    orientation: comp?.state?.orientation,
+    inputs: [
+      { name: 'A', label: 'A', width },
+      { name: 'B', label: 'B', width },
+      { name: 'Cin', label: 'Cin', width: 1 },
+    ],
+    outputs: [
+      { name: 'S', label: 'S', width },
+      { name: 'Cout', label: 'Cout', width: 1 },
+    ],
+    contentW,
+    contentH: 44, // « + » (16) + cadre LED (28)
+    inMargin: 28,
+    outMargin: 34,
+  });
+}
 
 export const arithGates: Record<string, GateDef> = {
   ADDER: {
     label: 'Additionneur',
     category: 'Arithmétique',
     w: 140,
-    h: 92, // recalculé dynamiquement
+    h: 92,
     inputs: [],
     outputs: [],
+    fixedDisplay: true,
     // width : largeur 1..32. Composant purement combinatoire :
     // S = (A + B + Cin) mod 2^width, Cout = retenue sortante.
     defaultState: { width: 4 },
     getDynamicGeometry: (comp) => {
-      const width = comp?.state?.width ?? 4;
-      const w = widthForBits(width, { minW: 168, portMargin: 36 });
-      const h = 92;
-      return {
-        w,
-        h,
-        inputs: [
-          { name: 'A', x: 0, y: 24, width },
-          { name: 'B', x: 0, y: 46, width },
-          { name: 'Cin', x: 0, y: 68, width: 1 },
-        ],
-        outputs: [
-          { name: 'S', x: w, y: 34, width },
-          { name: 'Cout', x: w, y: 64, width: 1 },
-        ],
-      };
+      const L = adderLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, outputValue, _i, _ibn, angle) => {
+    shape: (comp, outputValue) => {
       const width = comp?.state?.width ?? 4;
       const s = maskTo(width, asInt(outputValue));
-      const w = widthForBits(width, { minW: 168, portMargin: 36 });
-      const h = 92;
       const valText = width === 1 ? String(s) : formatBitsGrouped(s, width);
-      const midX = w / 2;
-      const lcdW = Math.max(30, valText.length * 9 + 14);
-      const lcdH = 22;
-      const lcdX = midX - lcdW / 2;
-      const lcdY = 46;
+      const L = adderLayout(comp);
+      const { content } = L;
+      const lcdY = content.y + 16;
+      const lcdH = content.h - 16;
       return (
-        <>
-          {/* Stubs entrées */}
-          <line x1="0" y1="24" x2="14" y2="24" strokeWidth="1.2" />
-          <line x1="0" y1="46" x2="14" y2="46" strokeWidth="1.2" />
-          <line x1="0" y1="68" x2="14" y2="68" strokeWidth="1.2" />
-          {/* Stubs sorties */}
-          <line x1={w - 14} y1="34" x2={w} y2="34" strokeWidth="1.2" />
-          <line x1={w - 14} y1="64" x2={w} y2="64" strokeWidth="1.2" />
-          {/* Cercles aux entrées */}
-          <circle cx="2.5" cy="24" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="46" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="68" r="2.5" fill="white" strokeWidth="1.2" />
-          {/* Disques aux sorties */}
-          <circle
-            cx={w - 2.5}
-            cy="34"
-            r="3"
-            fill={s ? 'var(--lcd-text, #fbbf24)' : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />
-          <circle cx={w - 2.5} cy="64" r="3" fill="#1f2937" stroke="#1f2937" strokeWidth="1" />
-          {/* Boîtier */}
+        <RectShape layout={L}>
+          {/* Symbole « + » au-dessus du LCD */}
+          <text
+            x={content.x + content.w / 2}
+            y={content.y + 13}
+            textAnchor="middle"
+            fontSize="17"
+            fontWeight="700"
+            fontFamily="'IBM Plex Mono', monospace"
+            fill="#1f2937"
+            style={NO_SEL}
+          >
+            +
+          </text>
+          {/* Cadre LED */}
           <rect
-            x="14"
-            y="10"
-            width={w - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          {/* Cadre LED (centré, sous le « + ») */}
-          <rect
-            x={lcdX}
+            x={content.x}
             y={lcdY}
-            width={lcdW}
+            width={content.w}
             height={lcdH}
             rx="2"
-            fill="var(--lcd-fill, #0f172a)"
-            stroke="var(--lcd-border, #0f172a)"
+            fill={LCD_FILL}
+            stroke={LCD_BORDER}
             strokeWidth="1"
           />
-          <g stroke="none">
-            {/* Labels des entrées (gauche) */}
-            <UprightText
-              angle={angle}
-              x="20"
-              y="29"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              A
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="51"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              B
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="72"
-              fontSize="11"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              Cin
-            </UprightText>
-            {/* Labels des sorties (droite, collés au bord, hors du LCD) */}
-            <UprightText
-              angle={angle}
-              x={w - 16}
-              y="39"
-              textAnchor="end"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              S
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={w - 16}
-              y="69"
-              textAnchor="end"
-              fontSize="11"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              Cout
-            </UprightText>
-            {/* Symbole « + » au-dessus du contenu */}
-            <UprightText
-              angle={angle}
-              x={midX}
-              y="33"
-              textAnchor="middle"
-              fontSize="17"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              +
-            </UprightText>
-            {/* Valeur de la somme dans le LCD */}
-            <UprightText
-              angle={angle}
-              x={midX}
-              y={lcdY + lcdH / 2 + 5}
-              textAnchor="middle"
-              fontSize={width === 1 ? 16 : 13}
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="var(--lcd-text, #fbbf24)"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              {valText}
-            </UprightText>
-          </g>
-        </>
+          {/* Valeur de la somme */}
+          <text
+            x={content.x + content.w / 2}
+            y={lcdY + lcdH / 2 + 5}
+            textAnchor="middle"
+            fontSize={width === 1 ? 16 : 13}
+            fontWeight="700"
+            fontFamily="'IBM Plex Mono', monospace"
+            fill={LCD_TEXT}
+            style={NO_SEL}
+          >
+            {valText}
+          </text>
+        </RectShape>
       );
     },
   },

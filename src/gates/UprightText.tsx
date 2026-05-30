@@ -1,11 +1,11 @@
 import type { CSSProperties, ReactNode, SVGProps } from 'react';
 
 // Texte qui reste droit quand le composant est tourné. On le contre-tourne de
-// `-angle` autour de SON PROPRE centre (bounding box) via `transform-box: fill-box`
-// + `transform-origin: center` : le glyphe reste horizontal ET visuellement centré
-// à sa place, quelle que soit l'orientation du composant parent.
-// À angle 0/undefined, aucun style n'est ajouté → rendu strictement identique à un
-// `<text>` ordinaire.
+// `-angle` via `transform-box: fill-box`, en pivotant autour de SON ANCRE (et non
+// du centre de la bbox) : l'origine horizontale suit `textAnchor` (left/center/
+// right) pour que le point d'ancrage ne se DÉCALE pas en rotation ; l'origine
+// verticale reste au centre (centrage visuel). À angle 0/undefined, aucun style
+// n'est ajouté → rendu strictement identique à un `<text>` ordinaire.
 export function UprightText({
   angle,
   x,
@@ -20,8 +20,13 @@ export function UprightText({
   style?: CSSProperties;
   children?: ReactNode;
 } & Omit<SVGProps<SVGTextElement>, 'x' | 'y' | 'transform' | 'children' | 'style'>) {
+  const originX = rest.textAnchor === 'end' ? 'right' : rest.textAnchor === 'middle' ? 'center' : 'left';
   const upright: CSSProperties = angle
-    ? { transform: `rotate(${-angle}deg)`, transformBox: 'fill-box', transformOrigin: 'center' }
+    ? {
+        transform: `rotate(${-angle}deg)`,
+        transformBox: 'fill-box',
+        transformOrigin: `${originX} center`,
+      }
     : {};
   return (
     <text x={x} y={y} style={{ ...style, ...upright }} {...rest}>

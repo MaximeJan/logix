@@ -1,9 +1,110 @@
 // Définitions de composants — catégorie « sequential ». Agrégées dans ./index.
+import type { CircuitComponent } from '../domain/types';
 import { asInt, maskTo } from '../lib/sim';
 import { formatBitsGrouped } from '../lib/bits';
-import { widthForBits, uprightTransform } from '../lib/geometry';
-import { UprightText } from './UprightText';
+import { rectLayout } from './rectLayout';
+import { RectShape } from './RectShape';
 import type { GateDef } from './types';
+
+// Dispositions par composant (dessin fixe — seuls les ports bougent selon l'orientation).
+function srlatchLayout(comp?: CircuitComponent) {
+  return rectLayout({
+    orientation: comp?.state?.orientation,
+    inputs: [
+      { name: 'S', label: 'S', width: 1 },
+      { name: 'R', label: 'R', width: 1 },
+    ],
+    outputs: [{ name: 'Q', label: 'Q', width: 1 }],
+    contentW: 30,
+    contentH: 44,
+    inMargin: 26,
+    outMargin: 26,
+  });
+}
+
+function dffLayout(comp?: CircuitComponent) {
+  const width = comp?.state?.width ?? 1;
+  const fmtLen = formatBitsGrouped(0, width).length;
+  const contentW = Math.max(46, fmtLen * 9 + 14);
+  return rectLayout({
+    orientation: comp?.state?.orientation,
+    inputs: [
+      { name: 'D', label: 'D', width },
+      { name: 'CLK', label: 'CLK', width: 1, clk: true },
+      { name: 'RST', label: 'R', width: 1 },
+    ],
+    outputs: [{ name: 'Q', label: 'Q', width }],
+    contentW,
+    contentH: 44,
+    inMargin: 40,
+    outMargin: 26,
+  });
+}
+
+function regLayout(comp?: CircuitComponent) {
+  const width = comp?.state?.width ?? 4;
+  const fmtLen = formatBitsGrouped(0, width).length;
+  const contentW = Math.max(46, fmtLen * 9 + 14);
+  return rectLayout({
+    orientation: comp?.state?.orientation,
+    inputs: [
+      { name: 'D', label: 'D', width },
+      { name: 'LD', label: 'LD', width: 1 },
+      { name: 'CLK', label: 'CLK', width: 1, clk: true },
+    ],
+    outputs: [{ name: 'Q', label: 'Q', width }],
+    contentW,
+    contentH: 44,
+    inMargin: 40,
+    outMargin: 26,
+  });
+}
+
+function counterLayout(comp?: CircuitComponent) {
+  const width = comp?.state?.width ?? 4;
+  const fmtLen = formatBitsGrouped(0, width).length;
+  const contentW = Math.max(46, fmtLen * 9 + 14);
+  return rectLayout({
+    orientation: comp?.state?.orientation,
+    inputs: [
+      { name: 'EN', label: 'EN', width: 1 },
+      { name: 'CLK', label: 'CLK', width: 1, clk: true },
+      { name: 'RST', label: 'R', width: 1 },
+    ],
+    outputs: [{ name: 'Q', label: 'Q', width }],
+    contentW,
+    contentH: 44,
+    inMargin: 40,
+    outMargin: 26,
+  });
+}
+
+function ramLayout(comp?: CircuitComponent) {
+  const aw = comp?.state?.addrWidth ?? 3;
+  const dw = comp?.state?.dataWidth ?? 4;
+  const fmtLen = formatBitsGrouped(0, dw).length;
+  const contentW = Math.max(46, fmtLen * 9 + 14);
+  return rectLayout({
+    orientation: comp?.state?.orientation,
+    inputs: [
+      { name: 'ADDR', label: 'A', width: aw },
+      { name: 'DATA_IN', label: 'D', width: dw },
+      { name: 'WE', label: 'WE', width: 1 },
+      { name: 'CLK', label: 'CLK', width: 1, clk: true },
+    ],
+    outputs: [{ name: 'DATA_OUT', label: 'Q', width: dw }],
+    contentW,
+    contentH: 60, // libellé « RAM N×M » (16) + cadre LED (44)
+    inMargin: 40,
+    outMargin: 26,
+  });
+}
+
+// Helpers de rendu du contenu central (LCD + valeur).
+const LCD_FILL = 'var(--lcd-fill, #0f172a)';
+const LCD_BORDER = 'var(--lcd-border, #0f172a)';
+const LCD_TEXT = 'var(--lcd-text, #fbbf24)';
+const NO_SEL = { userSelect: 'none' as const, pointerEvents: 'none' as const };
 
 export const sequentialGates: Record<string, GateDef> = {
   SRLATCH: {
@@ -11,584 +112,202 @@ export const sequentialGates: Record<string, GateDef> = {
     category: 'Séquentiel',
     w: 96,
     h: 76,
-    inputs: [
-      { name: 'S', x: 0, y: 28, width: 1 },
-      { name: 'R', x: 0, y: 52, width: 1 },
-    ],
-    outputs: [{ name: 'Q', x: 96, y: 40, width: 1 }],
-    // q : valeur stockée (0 ou 1). Pas de CLK : sortie suit S/R en continu.
+    inputs: [],
+    outputs: [],
+    fixedDisplay: true,
     defaultState: { q: 0 },
-    shape: (comp, _o, _i, _ibn, angle) => {
+    getDynamicGeometry: (comp) => {
+      const L = srlatchLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
+    },
+    shape: (comp) => {
       const q = asInt(comp?.state?.q) & 1;
-      const w = 96,
-        h = 76;
-      const lcdH = h - 40;
-      const lcdY = (h - lcdH) / 2;
-      const lcdX = 36,
-        lcdW = w - 72;
+      const L = srlatchLayout(comp);
+      const { content } = L;
       return (
-        <>
-          {/* Stubs des ports */}
-          <line x1="0" y1="28" x2="14" y2="28" strokeWidth="1.2" />
-          <line x1="0" y1="52" x2="14" y2="52" strokeWidth="1.2" />
-          <line x1={w - 14} y1="40" x2={w} y2="40" strokeWidth="1.2" />
-          {/* Cercles vides aux entrées */}
-          <circle cx="2.5" cy="28" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="52" r="2.5" fill="white" strokeWidth="1.2" />
-          {/* Disque plein à la sortie */}
-          <circle
-            cx={w - 2.5}
-            cy="40"
-            r="3"
-            fill={q ? 'var(--lcd-text, #fbbf24)' : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />
-          {/* Boîtier */}
+        <RectShape layout={L}>
           <rect
-            x="14"
-            y="10"
-            width={w - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          {/* Afficheur LED */}
-          <rect
-            x={lcdX}
-            y={lcdY}
-            width={lcdW}
-            height={lcdH}
+            x={content.x}
+            y={content.y}
+            width={content.w}
+            height={content.h}
             rx="2"
-            fill="var(--lcd-fill, #0f172a)"
-            stroke="var(--lcd-border, #0f172a)"
+            fill={LCD_FILL}
+            stroke={LCD_BORDER}
             strokeWidth="1"
           />
-          <g stroke="none">
-            <UprightText
-              angle={angle}
-              x="20"
-              y="33"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              S
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="57"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              R
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={w - 20}
-              y="45"
-              textAnchor="end"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              Q
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={lcdX + lcdW / 2}
-              y={lcdY + lcdH / 2 + 6}
-              textAnchor="middle"
-              fontSize="18"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="var(--lcd-text, #fbbf24)"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              {q}
-            </UprightText>
-          </g>
-        </>
+          <text
+            x={content.x + content.w / 2}
+            y={content.y + content.h / 2 + 6}
+            textAnchor="middle"
+            fontSize="18"
+            fontWeight="700"
+            fontFamily="'IBM Plex Mono', monospace"
+            fill={LCD_TEXT}
+            style={NO_SEL}
+          >
+            {q}
+          </text>
+        </RectShape>
       );
     },
   },
   DFF: {
     label: 'Bascule D',
     category: 'Séquentiel',
-    w: 104,
+    w: 134,
     h: 88,
     inputs: [],
     outputs: [],
-    // q     : valeur stockée (entier, masquée à `width` bits)
-    // lastClk : valeur CLK observée au tick précédent (pour détecter front montant)
-    // lastTriggerAt : timestamp du dernier front capturé (pour le halo visuel)
-    // width : largeur (1 = bascule classique, >1 = registre N-bit)
+    fixedDisplay: true,
     defaultState: { q: 0, lastClk: 0, lastTriggerAt: 0, width: 1 },
     getDynamicGeometry: (comp) => {
-      const width = comp?.state?.width ?? 1;
-      const w = widthForBits(width, { minW: 134, portMargin: 32 });
-      const h = 88;
-      return {
-        w,
-        h,
-        inputs: [
-          { name: 'D', x: 0, y: 24, width },
-          { name: 'CLK', x: 0, y: 48, width: 1 },
-          { name: 'RST', x: 0, y: 70, width: 1 },
-        ],
-        outputs: [{ name: 'Q', x: w, y: 44, width }],
-      };
+      const L = dffLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, _o, _i, _ibn, angle) => {
+    shape: (comp) => {
       const width = comp?.state?.width ?? 1;
       const q = maskTo(width, asInt(comp?.state?.q));
-      const w = widthForBits(width, { minW: 134, portMargin: 32 });
-      const h = 88;
       const now = Date.now();
       const since = now - (comp?.state?.lastTriggerAt ?? 0);
       const triggered = since >= 0 && since < 300;
-      const lcdH = h - 44;
-      const lcdY = (h - lcdH) / 2;
-      // LED décalé à droite pour laisser la place à « CLK » + triangle (~60px)
-      const lcdX = 62,
-        lcdW = w - 98;
+      const valText = width === 1 ? String(q) : formatBitsGrouped(q, width);
+      const L = dffLayout(comp);
+      const { content } = L;
+      const halo = triggered
+        ? { color: '#84cc16', opacity: Math.max(0, 1 - since / 300) }
+        : undefined;
       return (
-        <>
-          {/* Stubs */}
-          <line x1="0" y1="24" x2="14" y2="24" strokeWidth="1.2" />
-          <line x1="0" y1="48" x2="14" y2="48" strokeWidth="1.2" />
-          <line x1="0" y1="70" x2="14" y2="70" strokeWidth="1.2" />
-          <line x1={w - 14} y1="44" x2={w} y2="44" strokeWidth="1.2" />
-          {/* Cercles aux entrées */}
-          <circle cx="2.5" cy="24" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="48" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="70" r="2.5" fill="white" strokeWidth="1.2" />
-          {/* Disque plein à la sortie */}
-          <circle
-            cx={w - 2.5}
-            cy="44"
-            r="3"
-            fill={q ? 'var(--lcd-text, #fbbf24)' : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />
-          {/* Halo lime au moment du front montant */}
-          {triggered && (
-            <rect
-              x="12"
-              y="8"
-              width={w - 24}
-              height={h - 16}
-              rx="2"
-              fill="none"
-              stroke="#84cc16"
-              strokeWidth="3"
-              opacity={Math.max(0, 1 - since / 300)}
-            />
-          )}
-          {/* Boîtier */}
+        <RectShape layout={L} halo={halo}>
           <rect
-            x="14"
-            y="10"
-            width={w - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          {/* Cadre LED */}
-          <rect
-            x={lcdX}
-            y={lcdY}
-            width={lcdW}
-            height={lcdH}
+            x={content.x}
+            y={content.y}
+            width={content.w}
+            height={content.h}
             rx="2"
-            fill="var(--lcd-fill, #0f172a)"
-            stroke="var(--lcd-border, #0f172a)"
+            fill={LCD_FILL}
+            stroke={LCD_BORDER}
             strokeWidth="1"
           />
-          <g stroke="none">
-            <UprightText
-              angle={angle}
-              x="20"
-              y="29"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              D
-            </UprightText>
-            {/* Triangle ▷ collé au bord gauche, puis label « CLK » à droite */}
-            <path
-              d={`M 14 40 L 22 44 L 14 48 Z`}
-              fill="#1f2937"
-              transform={uprightTransform(angle, 18, 44)}
-            />
-            <UprightText
-              angle={angle}
-              x="26"
-              y="49"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              CLK
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="75"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              R
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={w - 20}
-              y="49"
-              textAnchor="end"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              Q
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={lcdX + lcdW / 2}
-              y={lcdY + lcdH / 2 + 5}
-              textAnchor="middle"
-              fontSize={width === 1 ? 20 : 14}
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="var(--lcd-text, #fbbf24)"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              {width === 1 ? String(q) : formatBitsGrouped(q, width)}
-            </UprightText>
-          </g>
-        </>
+          <text
+            x={content.x + content.w / 2}
+            y={content.y + content.h / 2 + 5}
+            textAnchor="middle"
+            fontSize={width === 1 ? 20 : 14}
+            fontWeight="700"
+            fontFamily="'IBM Plex Mono', monospace"
+            fill={LCD_TEXT}
+            style={NO_SEL}
+          >
+            {valText}
+          </text>
+        </RectShape>
       );
     },
   },
   REG: {
-    label: 'Registre',
+    label: 'Registre N-bit',
     category: 'Séquentiel',
-    w: 112,
-    h: 88, // recalculé dynamiquement
+    w: 134,
+    h: 88,
     inputs: [],
     outputs: [],
-    // q       : valeur stockée (entier, masqué à width bits)
-    // width   : largeur 1..32
-    // lastClk : valeur CLK observée au tick précédent (front montant)
-    defaultState: { q: 0, lastClk: 0, width: 4 },
+    fixedDisplay: true,
+    defaultState: { q: 0, lastClk: 0, lastTriggerAt: 0, width: 4 },
     getDynamicGeometry: (comp) => {
-      const width = comp?.state?.width ?? 4;
-      const w = widthForBits(width, { minW: 132, portMargin: 33 });
-      const h = 88;
-      return {
-        w,
-        h,
-        inputs: [
-          { name: 'D', x: 0, y: 24, width },
-          { name: 'LD', x: 0, y: 48, width: 1 },
-          { name: 'CLK', x: 0, y: 70, width: 1 },
-        ],
-        outputs: [{ name: 'Q', x: w, y: 44, width }],
-      };
+      const L = regLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, _o, _i, _ibn, angle) => {
+    shape: (comp) => {
       const width = comp?.state?.width ?? 4;
       const q = maskTo(width, asInt(comp?.state?.q));
-      const w = widthForBits(width, { minW: 132, portMargin: 33 });
-      const h = 88;
-      const lcdH = h - 44;
-      const lcdY = (h - lcdH) / 2;
-      // LED décalé à droite pour laisser la place à « CLK » + triangle (~66px)
-      const lcdX = 66,
-        lcdW = w - 102;
+      const now = Date.now();
+      const since = now - (comp?.state?.lastTriggerAt ?? 0);
+      const triggered = since >= 0 && since < 300;
+      const valText = width === 1 ? String(q) : formatBitsGrouped(q, width);
+      const L = regLayout(comp);
+      const { content } = L;
+      const halo = triggered
+        ? { color: '#84cc16', opacity: Math.max(0, 1 - since / 300) }
+        : undefined;
       return (
-        <>
-          {/* Stubs */}
-          <line x1="0" y1="24" x2="14" y2="24" strokeWidth="1.2" />
-          <line x1="0" y1="48" x2="14" y2="48" strokeWidth="1.2" />
-          <line x1="0" y1="70" x2="14" y2="70" strokeWidth="1.2" />
-          <line x1={w - 14} y1="44" x2={w} y2="44" strokeWidth="1.2" />
-          {/* Cercles aux entrées */}
-          <circle cx="2.5" cy="24" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="48" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="70" r="2.5" fill="white" strokeWidth="1.2" />
-          {/* Disque plein à la sortie */}
-          <circle
-            cx={w - 2.5}
-            cy="44"
-            r="3"
-            fill={q ? 'var(--lcd-text, #fbbf24)' : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />
-          {/* Boîtier */}
+        <RectShape layout={L} halo={halo}>
           <rect
-            x="14"
-            y="10"
-            width={w - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          {/* Cadre LED */}
-          <rect
-            x={lcdX}
-            y={lcdY}
-            width={lcdW}
-            height={lcdH}
+            x={content.x}
+            y={content.y}
+            width={content.w}
+            height={content.h}
             rx="2"
-            fill="var(--lcd-fill, #0f172a)"
-            stroke="var(--lcd-border, #0f172a)"
+            fill={LCD_FILL}
+            stroke={LCD_BORDER}
             strokeWidth="1"
           />
-          <g stroke="none">
-            <UprightText
-              angle={angle}
-              x="20"
-              y="29"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              D
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="53"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              LD
-            </UprightText>
-            {/* Triangle ▷ collé au bord gauche, puis label « CLK » à droite */}
-            <path
-              d={`M 14 66 L 22 70 L 14 74 Z`}
-              fill="#1f2937"
-              transform={uprightTransform(angle, 18, 70)}
-            />
-            <UprightText
-              angle={angle}
-              x="26"
-              y="75"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              CLK
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={w - 20}
-              y="49"
-              textAnchor="end"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              Q
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={lcdX + lcdW / 2}
-              y={lcdY + lcdH / 2 + 5}
-              textAnchor="middle"
-              fontSize={width === 1 ? 20 : 14}
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="var(--lcd-text, #fbbf24)"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              {width === 1 ? String(q) : formatBitsGrouped(q, width)}
-            </UprightText>
-          </g>
-        </>
+          <text
+            x={content.x + content.w / 2}
+            y={content.y + content.h / 2 + 5}
+            textAnchor="middle"
+            fontSize={width === 1 ? 20 : 14}
+            fontWeight="700"
+            fontFamily="'IBM Plex Mono', monospace"
+            fill={LCD_TEXT}
+            style={NO_SEL}
+          >
+            {valText}
+          </text>
+        </RectShape>
       );
     },
   },
   COUNTER: {
-    label: 'Compteur',
+    label: 'Compteur N-bit',
     category: 'Séquentiel',
-    w: 112,
+    w: 134,
     h: 88,
     inputs: [],
     outputs: [],
-    // q       : valeur courante (masquée à width bits)
-    // width   : largeur 1..32
-    // lastClk : valeur CLK observée au tick précédent (front montant)
-    defaultState: { q: 0, lastClk: 0, width: 4 },
+    fixedDisplay: true,
+    defaultState: { q: 0, lastClk: 0, lastTriggerAt: 0, width: 4 },
     getDynamicGeometry: (comp) => {
-      const width = comp?.state?.width ?? 4;
-      const w = widthForBits(width, { minW: 132, portMargin: 33 });
-      const h = 88;
-      return {
-        w,
-        h,
-        inputs: [
-          { name: 'EN', x: 0, y: 24, width: 1 },
-          { name: 'CLK', x: 0, y: 48, width: 1 },
-          { name: 'RST', x: 0, y: 70, width: 1 },
-        ],
-        outputs: [{ name: 'Q', x: w, y: 44, width }],
-      };
+      const L = counterLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, _o, _i, _ibn, angle) => {
+    shape: (comp) => {
       const width = comp?.state?.width ?? 4;
       const q = maskTo(width, asInt(comp?.state?.q));
-      const w = widthForBits(width, { minW: 132, portMargin: 33 });
-      const h = 88;
-      const lcdH = h - 44;
-      const lcdY = (h - lcdH) / 2;
-      // LED décalé à droite pour laisser la place à « CLK » + triangle (~66px)
-      const lcdX = 66,
-        lcdW = w - 102;
+      const now = Date.now();
+      const since = now - (comp?.state?.lastTriggerAt ?? 0);
+      const triggered = since >= 0 && since < 300;
+      const valText = width === 1 ? String(q) : formatBitsGrouped(q, width);
+      const L = counterLayout(comp);
+      const { content } = L;
+      const halo = triggered
+        ? { color: '#84cc16', opacity: Math.max(0, 1 - since / 300) }
+        : undefined;
       return (
-        <>
-          {/* Stubs */}
-          <line x1="0" y1="24" x2="14" y2="24" strokeWidth="1.2" />
-          <line x1="0" y1="48" x2="14" y2="48" strokeWidth="1.2" />
-          <line x1="0" y1="70" x2="14" y2="70" strokeWidth="1.2" />
-          <line x1={w - 14} y1="44" x2={w} y2="44" strokeWidth="1.2" />
-          {/* Cercles aux entrées */}
-          <circle cx="2.5" cy="24" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="48" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="70" r="2.5" fill="white" strokeWidth="1.2" />
-          {/* Disque plein à la sortie */}
-          <circle
-            cx={w - 2.5}
-            cy="44"
-            r="3"
-            fill={q ? 'var(--lcd-text, #fbbf24)' : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />
-          {/* Boîtier */}
+        <RectShape layout={L} halo={halo}>
           <rect
-            x="14"
-            y="10"
-            width={w - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          {/* Cadre LED */}
-          <rect
-            x={lcdX}
-            y={lcdY}
-            width={lcdW}
-            height={lcdH}
+            x={content.x}
+            y={content.y}
+            width={content.w}
+            height={content.h}
             rx="2"
-            fill="var(--lcd-fill, #0f172a)"
-            stroke="var(--lcd-border, #0f172a)"
+            fill={LCD_FILL}
+            stroke={LCD_BORDER}
             strokeWidth="1"
           />
-          <g stroke="none">
-            <UprightText
-              angle={angle}
-              x="20"
-              y="29"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              EN
-            </UprightText>
-            {/* Triangle ▷ collé au bord gauche, puis label « CLK » à droite */}
-            <path
-              d={`M 14 44 L 22 48 L 14 52 Z`}
-              fill="#1f2937"
-              transform={uprightTransform(angle, 18, 48)}
-            />
-            <UprightText
-              angle={angle}
-              x="26"
-              y="53"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              CLK
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="75"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              R
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={w - 20}
-              y="49"
-              textAnchor="end"
-              fontSize="14"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              Q
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={lcdX + lcdW / 2}
-              y={lcdY + lcdH / 2 + 5}
-              textAnchor="middle"
-              fontSize={width === 1 ? 20 : 14}
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="var(--lcd-text, #fbbf24)"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              {width === 1 ? String(q) : formatBitsGrouped(q, width)}
-            </UprightText>
-          </g>
-        </>
+          <text
+            x={content.x + content.w / 2}
+            y={content.y + content.h / 2 + 5}
+            textAnchor="middle"
+            fontSize={width === 1 ? 20 : 14}
+            fontWeight="700"
+            fontFamily="'IBM Plex Mono', monospace"
+            fill={LCD_TEXT}
+            style={NO_SEL}
+          >
+            {valText}
+          </text>
+        </RectShape>
       );
     },
   },
@@ -599,182 +318,68 @@ export const sequentialGates: Record<string, GateDef> = {
     h: 112,
     inputs: [],
     outputs: [],
+    fixedDisplay: true,
     // addrWidth : largeur du port ADDR (1..8) → 2^addrWidth cases mémoire
     // dataWidth : largeur des mots (1..16)
     // mem       : tableau d'entiers, longueur 2^addrWidth, chaque entrée masquée à dataWidth bits
     // lastClk   : valeur CLK observée au tick précédent (pour détecter le front montant)
     defaultState: { addrWidth: 3, dataWidth: 4, mem: [0, 0, 0, 0, 0, 0, 0, 0], lastClk: 0 },
     getDynamicGeometry: (comp) => {
-      const aw = comp?.state?.addrWidth ?? 3;
-      const dw = comp?.state?.dataWidth ?? 4;
-      const w = widthForBits(dw, { minW: 150, portMargin: 32 });
-      const h = 112;
-      return {
-        w,
-        h,
-        inputs: [
-          { name: 'ADDR', x: 0, y: 26, width: aw },
-          { name: 'DATA_IN', x: 0, y: 50, width: dw },
-          { name: 'WE', x: 0, y: 74, width: 1 },
-          { name: 'CLK', x: 0, y: 92, width: 1 },
-        ],
-        outputs: [{ name: 'DATA_OUT', x: w, y: 56, width: dw }],
-      };
+      const L = ramLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, _outputValue, _inputValue, inputsByName, angle) => {
+    shape: (comp, _outputValue, _inputValue, inputsByName) => {
       const aw = comp?.state?.addrWidth ?? 3;
       const dw = comp?.state?.dataWidth ?? 4;
       const mem = Array.isArray(comp?.state?.mem) ? comp.state.mem : [];
-      const w = widthForBits(dw, { minW: 150, portMargin: 32 });
-      const h = 112;
       const depth = 1 << aw;
       const liveAddr = maskTo(aw, asInt(inputsByName?.ADDR ?? 0));
       const liveValue = maskTo(dw, asInt(mem[liveAddr] ?? 0));
-      // LED centré verticalement sur le boîtier (h=112 → centre 56)
-      const lcdH = h - 56;
-      const lcdY = (h - lcdH) / 2;
-      // LED décalé pour laisser passer « CLK » + triangle (~60px) sur le port CLK
-      const lcdX = 62,
-        lcdW = w - 98;
+      const L = ramLayout(comp);
+      const { content } = L;
+      const lcdY = content.y + 16;
+      const lcdH = content.h - 16;
+      const valText = dw === 1 ? String(liveValue) : formatBitsGrouped(liveValue, dw);
       return (
-        <>
-          {/* Stubs */}
-          <line x1="0" y1="26" x2="14" y2="26" strokeWidth="1.2" />
-          <line x1="0" y1="50" x2="14" y2="50" strokeWidth="1.2" />
-          <line x1="0" y1="74" x2="14" y2="74" strokeWidth="1.2" />
-          <line x1="0" y1="92" x2="14" y2="92" strokeWidth="1.2" />
-          <line x1={w - 14} y1="56" x2={w} y2="56" strokeWidth="1.2" />
-          {/* Cercles aux entrées */}
-          <circle cx="2.5" cy="26" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="50" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="74" r="2.5" fill="white" strokeWidth="1.2" />
-          <circle cx="2.5" cy="92" r="2.5" fill="white" strokeWidth="1.2" />
-          {/* Disque plein à la sortie */}
-          <circle
-            cx={w - 2.5}
-            cy="56"
-            r="3"
-            fill={liveValue ? 'var(--lcd-text, #fbbf24)' : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />
-          {/* Boîtier */}
-          <rect
-            x="14"
-            y="10"
-            width={w - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
+        <RectShape layout={L}>
+          {/* Libellé RAM N×M */}
+          <text
+            x={content.x + content.w / 2}
+            y={content.y + 11}
+            textAnchor="middle"
+            fontSize="12"
+            fontWeight="700"
+            fontFamily="'IBM Plex Sans', sans-serif"
+            fill="#1f2937"
+            style={NO_SEL}
+          >
+            RAM {depth}×{dw}
+          </text>
           {/* Cadre LED */}
           <rect
-            x={lcdX}
+            x={content.x}
             y={lcdY}
-            width={lcdW}
+            width={content.w}
             height={lcdH}
             rx="2"
-            fill="var(--lcd-fill, #0f172a)"
-            stroke="var(--lcd-border, #0f172a)"
+            fill={LCD_FILL}
+            stroke={LCD_BORDER}
             strokeWidth="1"
           />
-          <g stroke="none">
-            <UprightText
-              angle={angle}
-              x={w / 2}
-              y={22}
-              textAnchor="middle"
-              fontSize="12"
-              fontWeight="700"
-              fontFamily="'IBM Plex Sans', sans-serif"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              RAM {depth}×{dw}
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="31"
-              fontSize="12"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              A
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="55"
-              fontSize="12"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              D
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x="20"
-              y="79"
-              fontSize="12"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              WE
-            </UprightText>
-            {/* Triangle ▷ collé au bord gauche, puis label « CLK » à droite */}
-            <path
-              d={`M 14 88 L 22 92 L 14 96 Z`}
-              fill="#1f2937"
-              transform={uprightTransform(angle, 18, 92)}
-            />
-            <UprightText
-              angle={angle}
-              x="26"
-              y="97"
-              fontSize="12"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              CLK
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={w - 20}
-              y="61"
-              textAnchor="end"
-              fontSize="12"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              Q
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={lcdX + lcdW / 2}
-              y={lcdY + lcdH / 2 + 5}
-              textAnchor="middle"
-              fontSize={dw === 1 ? 20 : 14}
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="var(--lcd-text, #fbbf24)"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              {dw === 1 ? String(liveValue) : formatBitsGrouped(liveValue, dw)}
-            </UprightText>
-          </g>
-        </>
+          {/* Valeur de la case adressée */}
+          <text
+            x={content.x + content.w / 2}
+            y={lcdY + lcdH / 2 + 5}
+            textAnchor="middle"
+            fontSize={dw === 1 ? 20 : 14}
+            fontWeight="700"
+            fontFamily="'IBM Plex Mono', monospace"
+            fill={LCD_TEXT}
+            style={NO_SEL}
+          >
+            {valText}
+          </text>
+        </RectShape>
       );
     },
   },

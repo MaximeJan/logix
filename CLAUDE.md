@@ -36,8 +36,15 @@ src/
     bits.ts, storage.ts    formatBitsGrouped ; adaptateur de stockage
   challenges.ts            données des niveaux (typées) + getLevel/getAllLevels
   gates/                   définitions des composants primitifs :
-    types.ts               interfaces GateDef / DynamicGeometry
+    types.ts               interfaces GateDef / DynamicGeometry (dont `fixedDisplay`)
     shared.tsx             helpers de rendu partagés (bitCells, seg7Layout)
+    rectLayout.ts          layout générique « boîte rectangulaire » : pose les
+                           ports sur le bord correspondant à l'orientation, calcule
+                           la dimension de la boîte, fournit le ▷ d'horloge.
+    RectShape.tsx          rendu standardisé d'une boîte rectangulaire (cadre,
+                           stubs, labels, ▷ CLK, halo) à partir d'un `RectLayout`.
+    UprightText.tsx        texte qui se contre-tourne (`-angle`) en pivotant
+                           autour de son ancre (left/center/right).
     io / logic / bus /     défs par catégorie (Record<string, GateDef>)
     arith / sequential / display
     index.tsx              agrège les catégories → `export const GATES`
@@ -103,6 +110,24 @@ Le **chronogramme** est géré par `hooks/useTrace.ts`, l'**historique par ongle
 
 **Le rendu du canevas** (`components/CircuitCanvas.tsx`) dessine la grille, les fils, les composants et les ports ; c'est un composant présentationnel piloté par les props/handlers de l'orchestrateur. **Le rendu des fils bus** utilise `makeBusTracks(points, n, pitch)` qui appelle `offsetManhattan(points, offset)` pour chaque piste — les premiers/derniers sommets restent fixes, les pistes convergent en éventail aux ports.
 
+### Composants rectangulaires « à dessin fixe » (`fixedDisplay`)
+
+Pour les composants rectangulaires complexes (SR-latch, DFF, REG, COUNTER, RAM, ADDER, SEG7…) qui contiennent un LCD/des libellés et qui ne supportent pas bien d'être réellement tournés, on utilise le modèle **`fixedDisplay: true`** :
+
+1. La `shape` n'est **jamais** rotée par `CircuitCanvas` (angle 0). Le contenu reste droit, peu importe l'orientation.
+2. C'est `getDynamicGeometry(comp)` qui place les ports sur le **bord** correspondant à l'orientation (`right`→gauche/droite, `down`→haut/bas, etc.).
+3. Toute la mécanique vit dans `rectLayout({ orientation, inputs, outputs, contentW, contentH, inMargin, outMargin })` (`gates/rectLayout.ts`) qui renvoie :
+   - `w`, `h` : dimensions de la boîte englobante (assez large pour étaler les ports le long du bord, assez haute pour le contenu).
+   - `box` : rectangle du boîtier (sans les stubs).
+   - `content` : zone réservée au contenu interne (LCD, valeur…), centrée sur l'axe « long ».
+   - `inputs`, `outputs` : ports au format `Port[]` (pour `getDynamicGeometry`).
+   - `ports` : détails de rendu (px/py = connexion, sx/sy = bout de stub, lx/ly + anchor = label, edge L/R/T/B, clk).
+4. La `shape` instancie `<RectShape layout={L} halo={…}>` (`gates/RectShape.tsx`) qui dessine cadre + stubs + labels + ▷ CLK + halo, et glisse son contenu via `children` dans `L.content`.
+
+Constantes (`rectLayout.ts`) : `STUB=14, SPACING=24, EDGE_PAD=10, PORT_END_PAD=12, CLK_GAP=8`. Le label d'un port marqué `clk: true` est automatiquement décalé de `CLK_GAP` pour laisser passer le triangle ▷.
+
+Pour les composants qui ont des **labels qui doivent rester droits malgré la rotation** (sans passer par `fixedDisplay`), utiliser `<UprightText angle={angle} textAnchor=…>` qui se contre-tourne autour de son ancre.
+
 ## Conventions de code
 
 - **Pas de booléens dans le simulateur.** Tout est entier. `asInt(v)` normalise (booléens, undefined, null → 0/1).
@@ -134,11 +159,12 @@ Voir `ROADMAP.md` pour le détail. Très brièvement :
 
 1. Ajouter une entrée dans le **fichier de catégorie** adapté (`src/gates/io|logic|bus|arith|sequential|display.tsx`) : `label`, `category`, ports, `defaultState`, `shape`, et soit `fn` (combinatoire pure) soit gestion explicite dans `simulate()` (`lib/sim.ts`). `index.tsx` l'agrège automatiquement. Ajouter aussi un cas dans les tests (`tests/run.test.mjs`) qui valident la vraie `GATES`.
 2. Si géométrie variable : ajouter `getDynamicGeometry(comp)`.
-3. Ajouter le type dans `PALETTE_ORDER` (`lib/constants.ts`).
-4. La palette (`components/PalettePanel.tsx`) groupe par `category` automatiquement ; une nouvelle catégorie n'a qu'à exister dans `GATES` et `PALETTE_ORDER`.
-5. Si propriétés configurables : ajouter un bloc dans `components/PropertiesPanel.tsx` (ou une section dédiée dans `components/properties/` si c'est un gros éditeur, cf. RAM/LEDMATRIX). Pour la largeur de bus, réutiliser `<BusWidthControl />`.
-6. Si état séquentiel (comme DFF) : compléter `stepSequential` (`lib/sim.ts`) et, au besoin, `useCircuitEngine`.
-7. `npm run build` + ouvrir l'app + placer le composant + tester ses bornes.
+3. **Si c'est une boîte rectangulaire** (LCD, registre, latch, RAM…) : marquer `fixedDisplay: true`, écrire un petit `xxxLayout(comp)` qui appelle `rectLayout(…)`, exposer son résultat dans `getDynamicGeometry`, et rendre via `<RectShape layout={L}>…</RectShape>`. Voir `arith.tsx` (ADDER) ou `sequential.tsx` (DFF/REG/COUNTER/RAM/SRLATCH) pour le pattern.
+4. Ajouter le type dans `PALETTE_ORDER` (`lib/constants.ts`).
+5. La palette (`components/PalettePanel.tsx`) groupe par `category` automatiquement ; une nouvelle catégorie n'a qu'à exister dans `GATES` et `PALETTE_ORDER`.
+6. Si propriétés configurables : ajouter un bloc dans `components/PropertiesPanel.tsx` (ou une section dédiée dans `components/properties/` si c'est un gros éditeur, cf. RAM/LEDMATRIX). Pour la largeur de bus, réutiliser `<BusWidthControl />`.
+7. Si état séquentiel (comme DFF) : compléter `stepSequential` (`lib/sim.ts`) et, au besoin, `useCircuitEngine`.
+8. `npm run build` + ouvrir l'app + placer le composant + tester ses bornes (notamment les 4 orientations).
 
 ## Quand tu hésites
 
