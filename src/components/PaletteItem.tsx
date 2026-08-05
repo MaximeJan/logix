@@ -27,17 +27,21 @@ export function PaletteItem({
   // ViewBox adapté à la taille réelle (utile pour SPLITTER/MERGER et les composants custom).
   const needsDynamic = isCustom || def.w > 60 || def.h > 40;
   const viewBox = needsDynamic ? `-3 -3 ${def.w + 6} ${def.h + 6}` : '-3 -2 70 44';
-  const previewMaxH = compact ? 28 : 56;
-  const baseH = compact ? 22 : 44;
+  // Compact (panneau d'exercice en iframe) : la rangée reste plus fine que la
+  // palette normale, mais l'icône et le nom du composant restent lisibles —
+  // c'est le pictogramme qui aide l'élève à retrouver le composant, pas la
+  // taille de la rangée qui l'entoure.
+  const previewMaxH = compact ? 40 : 56;
+  const baseH = compact ? 32 : 44;
   const svgH = needsDynamic ? Math.min(previewMaxH, def.h + 6) : baseH;
-  const svgW = needsDynamic ? Math.round((def.w + 6) * (svgH / (def.h + 6))) : compact ? 33 : 66;
+  const svgW = needsDynamic ? Math.round((def.w + 6) * (svgH / (def.h + 6))) : compact ? 48 : 66;
   return (
     <div className="relative group">
       <HoverTooltip text={def.label as string} onlyIfTruncated>
         <button
           onMouseDown={(e) => onMouseDown(e, type)}
           className={`w-full flex items-center rounded-lg border transition select-none
-            ${compact ? 'gap-1.5 px-1.5 py-0.5' : 'gap-3 px-3 py-2'}
+            ${compact ? 'gap-2 px-2 py-1' : 'gap-3 px-3 py-2'}
             ${
               picked
                 ? 'border-amber-500 bg-amber-50'
@@ -64,7 +68,7 @@ export function PaletteItem({
           <span
             data-truncate
             className={`font-medium text-stone-700 truncate min-w-0 ${
-              compact ? 'text-[10px]' : 'text-sm'
+              compact ? 'text-xs' : 'text-sm'
             }`}
           >
             {def.label as string}

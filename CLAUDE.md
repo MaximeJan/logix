@@ -136,6 +136,9 @@ L'app reste 100 % statique.
   et ne produit que **deux** champs à copier : « Lien de l'exercice » et « `<iframe>` ».
 - En mode embed, le bouton **Télécharger** (JSON) reste dans la barre d'outils : l'élève doit
   pouvoir rendre sa solution. Seul le *chargement* d'un JSON est masqué.
+- `exercise.autoOpenProperties` (clé `p` dans le format fil, absente = `false`) contrôle si
+  sélectionner un composant ouvre automatiquement le panneau « Propriétés ». Faux par défaut,
+  réglable dans `ExerciseBuilderModal`. Voir l'effet `autoOpenProperties` dans l'orchestrateur.
 
 **Trois modes de vérification** (`Verify` dans `domain/exercise.ts`) : `truthtable`, `sequence`,
 et `none`. Avec `none`, l'exercice n'a ni ports ni lignes obligatoires — `decodeExercise` n'exige
@@ -151,9 +154,11 @@ disponible. Le panneau est un `flex-col` : la consigne + les composants défilen
 dans une iframe basse.
 
 `SCALE` (dans `ExercisePanel.tsx`) définit deux échelles : `normal` (site) et `compact` (embed).
-En embed tout le contenu du panneau est réduit de moitié — la largeur `w-52` ne change pas, pour
-que la consigne reste lisible. `PaletteItem` accepte `compact` pour la même raison (aperçu 28 px
-au lieu de 56, libellé `text-[10px]`).
+En embed, le texte de consigne, les espacements et le padding du panneau sont réduits — la largeur
+`w-52` ne change pas, pour que la consigne reste lisible. **`PaletteItem` fait exception** : sa
+prop `compact` réduit la hauteur de rangée mais garde l'icône et le nom du composant
+lisibles (aperçu 32-40 px, libellé `text-xs`) — c'est le pictogramme qui aide l'élève à
+retrouver le composant, pas la taille de la rangée qui l'entoure.
 
 Le panneau gauche est l'un ou l'autre, sans bascule : `ExercisePanel` si l'URL portait un
 exercice, `PalettePanel` sinon.

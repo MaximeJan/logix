@@ -32,4 +32,11 @@ export interface Exercise {
   outputs: ExercisePort[];
   verify: Verify;
   truthTable?: IoRow[];
+  /**
+   * Ouvre automatiquement le panneau « Propriétés » quand l'élève sélectionne
+   * un composant. Faux par défaut : l'enseignant choisit de l'activer si
+   * l'exercice a besoin que l'élève renomme des ports ou règle des largeurs
+   * de bus depuis ce panneau.
+   */
+  autoOpenProperties: boolean;
 }

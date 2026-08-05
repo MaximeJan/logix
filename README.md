@@ -79,7 +79,10 @@ et proposer des exercices au fil du cours.
    Pour les deux premières, le bouton **« Remplir les sorties depuis le circuit courant »** déduit
    les réponses attendues en simulant le circuit de l'onglet actif : construis la solution, et la
    table se remplit toute seule.
-4. Choisis la hauteur de l'iframe (200–2000 px), puis copie l'un des deux champs : le lien de
+4. Coche (ou non) **« Ouvrir automatiquement le panneau Propriétés »** — décoché par défaut, pour
+   que l'élève reste concentré sur le canevas. Active-le si l'exercice demande de renommer des
+   ports ou de régler des largeurs de bus depuis ce panneau.
+5. Choisis la hauteur de l'iframe (200–2000 px), puis copie l'un des deux champs : le lien de
    l'exercice, ou l'extrait `<iframe>` prêt à coller dans ta page.
 
 ```html

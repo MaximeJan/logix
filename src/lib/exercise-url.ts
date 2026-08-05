@@ -6,7 +6,8 @@
 //
 // Format « fil » (clés d'une lettre pour garder l'URL courte) :
 //   { v:1, t:titre, o:objectif, s:[étapes], a:[typesAutorisés],
-//     i:[[nom,largeur]], u:[[nom,largeur]], k:'tt'|'seq'|'none', r:[[[in],[out]]] }
+//     i:[[nom,largeur]], u:[[nom,largeur]], k:'tt'|'seq'|'none', r:[[[in],[out]]],
+//     p:1 (optionnel, absent = false) }
 // puis JSON → UTF-8 → base64url.
 //
 // Le payload vient de l'URL : c'est une donnée NON FIABLE. `decodeExercise` ne
@@ -71,6 +72,7 @@ interface WireExercise {
   u: WirePort[];
   k: WireKind;
   r: IoRow[];
+  p?: 1;
 }
 
 const wireKind = (v: Verify): WireKind =>
@@ -94,6 +96,7 @@ export function encodeExercise(exercise: Exercise): string {
     u: exercise.outputs.map((p): WirePort => [p.name, p.width]),
     k: wireKind(exercise.verify),
     r: rows,
+    ...(exercise.autoOpenProperties ? { p: 1 } : {}),
   };
   const bytes = new TextEncoder().encode(JSON.stringify(wire));
   return toBase64Url(bytesToBase64(bytes));
@@ -179,6 +182,7 @@ export function decodeExercise(payload: string, opts: DecodeOptions = {}): Exerc
     allowedTypes: textList(data.a, MAX_PORTS * 4).filter(isKnownType),
     inputs: parsePorts(data.i),
     outputs: parsePorts(data.u),
+    autoOpenProperties: data.p === 1,
   };
 
   // Exercice libre : ni ports ni lignes obligatoires, pas de bouton « Vérifier ».

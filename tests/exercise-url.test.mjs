@@ -31,6 +31,7 @@ const notExercise = {
     [[0], [1]],
     [[1], [0]],
   ],
+  autoOpenProperties: false,
 };
 
 describe('encodeExercise / decodeExercise', () => {
@@ -77,6 +78,15 @@ describe('encodeExercise / decodeExercise', () => {
     expect(decoded.verify).toEqual(seqExercise.verify);
     expect(decoded.truthTable).toBeUndefined();
   });
+
+  it('transporte autoOpenProperties (absent = false par défaut)', () => {
+    const decodedDefault = decodeExercise(encodeExercise(notExercise), { isKnownType });
+    expect(decodedDefault.autoOpenProperties).toBe(false);
+
+    const withOpen = { ...notExercise, autoOpenProperties: true };
+    const decodedOpen = decodeExercise(encodeExercise(withOpen), { isKnownType });
+    expect(decodedOpen.autoOpenProperties).toBe(true);
+  });
 });
 
 describe('exercice sans vérification', () => {
@@ -88,6 +98,7 @@ describe('exercice sans vérification', () => {
     inputs: [],
     outputs: [],
     verify: { type: 'none' },
+    autoOpenProperties: false,
   };
 
   it('fait un aller-retour fidèle, même sans port ni ligne', () => {

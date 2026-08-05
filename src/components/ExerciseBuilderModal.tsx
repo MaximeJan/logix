@@ -39,6 +39,7 @@ interface Draft {
   outputs: ExercisePort[];
   verifyKind: VerifyKind;
   rows: IoRow[];
+  autoOpenProperties: boolean;
 }
 
 const EMPTY: Draft = {
@@ -50,6 +51,7 @@ const EMPTY: Draft = {
   outputs: [{ name: 'S', width: 1 }],
   verifyKind: 'tt',
   rows: [],
+  autoOpenProperties: false,
 };
 
 // Modale de création d'exercice : l'enseignant compose un énoncé, éventuellement
@@ -105,6 +107,7 @@ export function ExerciseBuilderModal({
           ? { type: 'sequence', steps: draft.rows }
           : { type: 'truthtable' },
       ...(draft.verifyKind === 'tt' ? { truthTable: draft.rows } : {}),
+      autoOpenProperties: draft.autoOpenProperties,
     };
   }, [draft, noVerify]);
 
@@ -271,6 +274,16 @@ export function ExerciseBuilderModal({
               })}
             </div>
           </Field>
+
+          {/* ---- Panneau Propriétés ---- */}
+          <label className="flex items-center gap-1.5 text-xs text-stone-700">
+            <input
+              type="checkbox"
+              checked={draft.autoOpenProperties}
+              onChange={(e) => patch({ autoOpenProperties: e.target.checked })}
+            />
+            Ouvrir automatiquement le panneau « Propriétés » quand l'élève sélectionne un composant
+          </label>
 
           {/* ---- Ports ---- */}
           <div className="grid grid-cols-2 gap-4">
