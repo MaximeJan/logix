@@ -25,7 +25,22 @@ function readOutputs(sim: ReturnType<typeof simulate>, outputIds: string[]): num
   return outputIds.map((outId) => asInt(sim.inputValues.get(portKey(outId, 'in0')) ?? 0));
 }
 
-export function verifyChallenge(circuit: Circuit, level: Level, getDef: GetDef): VerifyResult {
+export interface VerifyOptions {
+  /**
+   * Par défaut on s'arrête à la première ligne fausse (retour rapide pour
+   * l'élève). Le générateur d'exercices passe `false` : il veut les sorties
+   * obtenues pour TOUTES les lignes, afin de pré-remplir la table attendue.
+   */
+  stopOnFirstFailure?: boolean;
+}
+
+export function verifyChallenge(
+  circuit: Circuit,
+  level: Level,
+  getDef: GetDef,
+  options: VerifyOptions = {},
+): VerifyResult {
+  const stopOnFirstFailure = options.stopOnFirstFailure !== false;
   // Récupère les INPUT/OUTPUT du circuit courant par ordre (ignore les labels)
   const inputComps = circuit.components.filter((c) => c.type === 'INPUT');
   const outputComps = circuit.components.filter((c) => c.type === 'OUTPUT');
@@ -69,9 +84,14 @@ export function verifyChallenge(circuit: Circuit, level: Level, getDef: GetDef):
       const actualOutVals = readOutputs(sim, outputIds);
       const match = rowMatches(expectedOutVals, actualOutVals);
       allRows.push({ inVals, expectedOutVals, actualOutVals, match });
-      if (!match) return { success: false, error: 'Table échouée', table: allRows };
+      if (!match && stopOnFirstFailure) {
+        return { success: false, error: 'Table échouée', table: allRows };
+      }
     }
-    return { success: true, table: allRows };
+    const failed = allRows.some((r) => !r.match);
+    return failed
+      ? { success: false, error: 'Table échouée', table: allRows }
+      : { success: true, table: allRows };
   }
 
   if (level.verify.type === 'sequence') {
@@ -90,9 +110,14 @@ export function verifyChallenge(circuit: Circuit, level: Level, getDef: GetDef):
       const actualOutVals = readOutputs(sim, outputIds);
       const match = rowMatches(expectedOutVals, actualOutVals);
       allSteps.push({ inVals, expectedOutVals, actualOutVals, match });
-      if (!match) return { success: false, error: 'Séquence échouée', table: allSteps };
+      if (!match && stopOnFirstFailure) {
+        return { success: false, error: 'Séquence échouée', table: allSteps };
+      }
     }
-    return { success: true, table: allSteps };
+    const failed = allSteps.some((r) => !r.match);
+    return failed
+      ? { success: false, error: 'Séquence échouée', table: allSteps }
+      : { success: true, table: allSteps };
   }
 
   return { success: false, error: 'Type de vérification inconnu' };

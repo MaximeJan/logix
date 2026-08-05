@@ -29,7 +29,7 @@ App **React 18 + Vite + TypeScript**, code modulaire :
 - `src/CircuitSimulator.tsx` — orchestrateur : état, handlers, composition du rendu
 - `src/main.tsx` — point d'entrée React
 - `src/domain/` — types du domaine
-- `src/lib/` — logique pure sans React (simulation, persistance, géométrie, constantes)
+- `src/lib/` — logique pure sans React (simulation, persistance, géométrie, constantes, exercices-URL)
 - `src/gates/` — définitions des composants par catégorie (`io/logic/bus/arith/sequential/display`), agrégées dans `index.tsx`, + résolution (`getDef`, `simulate`)
 - `src/components/` — composants d'interface (barre d'outils, canevas, panneaux, modales…)
 - `src/hooks/` — hooks d'état réutilisables (historique, autosave, moteur, chronogramme…)
@@ -60,6 +60,38 @@ Phases terminées :
 - Afficheur 7 segments, matrice LED
 
 À venir : petit processeur pédagogique (PC, ALU, mémoire, jeu d'instructions minimal).
+
+## Créer des exercices par URL
+
+Un exercice sur mesure tient **entièrement dans son lien** : aucun backend, rien à redéployer.
+Pratique pour embarquer Logix dans un site de théorie et proposer des exercices au fil du cours.
+
+1. Ouvre **Challenges** dans la barre d'outils, puis **« Créer un exercice »** en bas du panneau.
+2. Remplis le titre, l'objectif, les étapes, les composants proposés à l'élève et les entrées /
+   sorties attendues.
+3. Génère la table de vérité (jusqu'à 8 bits d'entrée, toutes les combinaisons d'un clic), ou
+   choisis « Séquence » pour un circuit séquentiel. Le bouton **« Remplir les sorties depuis le
+   circuit courant »** déduit les réponses attendues en simulant le circuit de l'onglet actif :
+   construis la solution, et la table se remplit toute seule.
+4. Copie le lien, ou directement l'extrait `<iframe>` prêt à coller dans ta page.
+
+```html
+<iframe src="https://…/logix/?ex=…&embed=1" width="100%" height="700" style="border:0"></iframe>
+```
+
+Deux paramètres d'URL :
+
+| Paramètre | Effet |
+| --- | --- |
+| `?ex=<payload>` | Charge l'exercice encodé (base64url) et démarre en mode challenge. |
+| `&embed=1` | UI allégée pour l'iframe : ni onglets, ni import/export, ni encapsulation. |
+
+L'élève travaille sur une sauvegarde propre à l'exercice : son bac à sable personnel n'est jamais
+écrasé, et un rafraîchissement de la page conserve son circuit en cours. Une URL corrompue est
+ignorée — l'app démarre alors normalement.
+
+> La vérification apparie les Entrée/Sortie de l'élève **par ordre de création**, pas par étiquette.
+> Précise donc l'ordre attendu dans les étapes de l'énoncé.
 
 ## Qualité du code
 

@@ -33,6 +33,8 @@ interface ToolbarProps {
   canEncapsulate: boolean;
   editMode: boolean;
   onCancelEdit: () => void;
+  /** Mode embed (iframe) : masque fichiers, encapsulation et bascule Challenges. */
+  embed?: boolean;
   viewBox: ViewBox | null;
   viewBoxBase: { w: number; h: number } | null;
   onResetView: () => void;
@@ -67,6 +69,7 @@ export function Toolbar({
   canEncapsulate,
   editMode,
   onCancelEdit,
+  embed,
   viewBox,
   viewBoxBase,
   onResetView,
@@ -90,26 +93,30 @@ export function Toolbar({
         <img src={logixLogo} alt="Logix" className="h-7 w-auto select-none" draggable={false} />
       </div>
 
-      <ToolbarButton onClick={onSave} title="Enregistrer en JSON (Ctrl+S)">
-        <Save size={16} />
-      </ToolbarButton>
-      <ToolbarButton onClick={() => fileInputRef.current?.click()} title="Charger un JSON">
-        <Upload size={16} />
-      </ToolbarButton>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,application/json"
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files?.[0]) {
-            onLoadFile(e.target.files[0]);
-            e.target.value = '';
-          }
-        }}
-      />
+      {!embed && (
+        <>
+          <ToolbarButton onClick={onSave} title="Enregistrer en JSON (Ctrl+S)">
+            <Save size={16} />
+          </ToolbarButton>
+          <ToolbarButton onClick={() => fileInputRef.current?.click()} title="Charger un JSON">
+            <Upload size={16} />
+          </ToolbarButton>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.[0]) {
+                onLoadFile(e.target.files[0]);
+                e.target.value = '';
+              }
+            }}
+          />
 
-      <Separator />
+          <Separator />
+        </>
+      )}
 
       <ToolbarButton onClick={onUndo} title="Annuler (Ctrl+Z)" disabled={!canUndo}>
         <Undo2 size={16} />
@@ -130,37 +137,41 @@ export function Toolbar({
         <Trash2 size={16} />
       </ToolbarButton>
 
-      <Separator />
+      {!embed && (
+        <>
+          <Separator />
 
-      <button
-        onClick={onEncapsulate}
-        disabled={!canEncapsulate}
-        className={`px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium transition
+          <button
+            onClick={onEncapsulate}
+            disabled={!canEncapsulate}
+            className={`px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium transition
           ${
             canEncapsulate
               ? 'text-stone-700 hover:bg-stone-100 active:bg-stone-200'
               : 'text-stone-300 cursor-not-allowed'
           }`}
-        title={
-          editMode
-            ? 'Enregistrer les modifications de la définition'
-            : canEncapsulate
-              ? 'Encapsuler la sélection en un composant réutilisable'
-              : 'Sélectionnez ≥1 entrée + ≥1 sortie + ≥1 porte pour activer'
-        }
-      >
-        <Package size={15} />
-        {editMode ? 'Terminer' : 'Encapsuler la sélection'}
-      </button>
-      {editMode && (
-        <button
-          onClick={onCancelEdit}
-          className="px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium text-rose-700 hover:bg-rose-50"
-          title="Annuler les modifications et revenir au circuit principal"
-        >
-          <X size={15} />
-          Annuler l'édition
-        </button>
+            title={
+              editMode
+                ? 'Enregistrer les modifications de la définition'
+                : canEncapsulate
+                  ? 'Encapsuler la sélection en un composant réutilisable'
+                  : 'Sélectionnez ≥1 entrée + ≥1 sortie + ≥1 porte pour activer'
+            }
+          >
+            <Package size={15} />
+            {editMode ? 'Terminer' : 'Encapsuler la sélection'}
+          </button>
+          {editMode && (
+            <button
+              onClick={onCancelEdit}
+              className="px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium text-rose-700 hover:bg-rose-50"
+              title="Annuler les modifications et revenir au circuit principal"
+            >
+              <X size={15} />
+              Annuler l'édition
+            </button>
+          )}
+        </>
       )}
 
       <div className="flex-1" />
@@ -178,17 +189,19 @@ export function Toolbar({
         </button>
       )}
 
-      <button
-        onClick={onToggleChallenges}
-        className={`px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium transition ${
-          challengesOpen
-            ? 'bg-amber-500 text-white hover:bg-amber-600'
-            : 'text-stone-700 hover:bg-stone-100'
-        }`}
-        title="Niveaux de challenge (apprentissage progressif)"
-      >
-        <Trophy size={14} /> Challenges
-      </button>
+      {!embed && (
+        <button
+          onClick={onToggleChallenges}
+          className={`px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium transition ${
+            challengesOpen
+              ? 'bg-amber-500 text-white hover:bg-amber-600'
+              : 'text-stone-700 hover:bg-stone-100'
+          }`}
+          title="Niveaux de challenge (apprentissage progressif)"
+        >
+          <Trophy size={14} /> Challenges
+        </button>
+      )}
 
       <button
         onClick={onTogglePreferences}

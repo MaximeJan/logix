@@ -1,15 +1,9 @@
 import { Trophy } from 'lucide-react';
-import { getLevel } from '../challenges';
 import { GATES } from '../gates';
-
-interface Port {
-  name: string;
-  width: number;
-}
+import type { ChallengePort as Port, Level } from '../challenges';
 
 interface ChallengeBannerProps {
-  chapterId: string;
-  levelId: string;
+  level: Level;
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }
@@ -20,14 +14,12 @@ const fmtPorts = (ports: Port[]) =>
 // Bandeau de consigne du challenge, au-dessus du canevas (repliable). Énonce le
 // titre, l'objectif, les étapes, et les ports d'entrée/sortie attendus. Sert de
 // référence pendant la résolution ; la vérification se fait depuis le panneau gauche.
+// Le niveau est résolu par l'orchestrateur (catalogue ou exercice venu de l'URL).
 export function ChallengeBanner({
-  chapterId,
-  levelId,
+  level: lvl,
   collapsed,
   onToggleCollapsed,
 }: ChallengeBannerProps) {
-  const lvl = getLevel(chapterId, levelId);
-  if (!lvl) return null;
   const compLabels = lvl.allowedTypes
     .filter((t: string) => t !== 'INPUT' && t !== 'OUTPUT')
     .map((t: string) => GATES[t]?.label ?? t);

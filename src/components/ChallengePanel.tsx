@@ -1,7 +1,8 @@
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
-import { Zap, Plus, Timer, Cpu, GitBranch } from 'lucide-react';
-import { getLevel, getAllLevels } from '../challenges';
+import { Zap, Plus, Timer, Cpu, GitBranch, Link2 } from 'lucide-react';
+import { getAllLevels } from '../challenges';
 import { PaletteItem } from './PaletteItem';
+import type { Level } from '../challenges';
 import type { ChallengeRow } from '../lib/challenge-verify';
 
 export type { ChallengeRow };
@@ -9,6 +10,8 @@ export type { ChallengeRow };
 export interface ChallengeMode {
   chapterId: string;
   levelId: string;
+  /** Niveau ad hoc (exercice reçu par URL) — absent pour les niveaux du catalogue. */
+  level?: Level;
   result: 'success' | 'fail' | null;
   error: string | null;
   table: ChallengeRow[] | null;
@@ -16,13 +19,18 @@ export interface ChallengeMode {
 
 interface ChallengePanelProps {
   challengeMode: ChallengeMode | null;
+  /** Niveau courant résolu par l'orchestrateur (catalogue ou exercice d'URL). */
+  level: Level | null;
   onBack: () => void;
   onStartLevel: (chapterId: string, levelId: string) => void;
   onVerify: () => void;
   onRetry: () => void;
   onPaletteMouseDown: (e: ReactMouseEvent, type: string) => void;
+  onOpenBuilder: () => void;
   placeType: string | null;
   customDefs: Record<string, unknown> | null | undefined;
+  /** Mode embed (iframe) : pas de retour à la liste, pas de générateur d'exercice. */
+  embed?: boolean;
 }
 
 const CHAPTER_ICONS: Record<string, ReactNode> = {
@@ -45,19 +53,23 @@ const CHAPTER_LABELS: Record<string, string> = {
 // Vérifier, puis succès → niveau suivant, ou échec → table des écarts).
 export function ChallengePanel({
   challengeMode,
+  level,
   onBack,
   onStartLevel,
   onVerify,
   onRetry,
   onPaletteMouseDown,
+  onOpenBuilder,
   placeType,
   customDefs,
+  embed,
 }: ChallengePanelProps) {
   return (
     <div className="w-52 bg-white border-r border-stone-200 p-3 overflow-y-auto flex flex-col">
-      {challengeMode ? (
+      {challengeMode && level ? (
         <LevelView
           challengeMode={challengeMode}
+          level={level}
           onBack={onBack}
           onStartLevel={onStartLevel}
           onVerify={onVerify}
@@ -65,10 +77,21 @@ export function ChallengePanel({
           onPaletteMouseDown={onPaletteMouseDown}
           placeType={placeType}
           customDefs={customDefs}
+          embed={embed}
         />
       ) : (
         <div className="space-y-2 flex-1 overflow-y-auto">
           <LevelList onStartLevel={onStartLevel} />
+          {!embed && (
+            <button
+              onClick={onOpenBuilder}
+              className="mt-3 w-full px-2 py-1.5 rounded border border-dashed border-stone-300 text-xs font-medium text-stone-600 hover:bg-stone-50 flex items-center justify-center gap-1.5"
+              title="Composer un exercice sur mesure et obtenir son lien partageable"
+            >
+              <Link2 size={12} />
+              Créer un exercice
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -77,6 +100,7 @@ export function ChallengePanel({
 
 function LevelView({
   challengeMode,
+  level,
   onBack,
   onStartLevel,
   onVerify,
@@ -84,14 +108,21 @@ function LevelView({
   onPaletteMouseDown,
   placeType,
   customDefs,
-}: Omit<ChallengePanelProps, 'challengeMode'> & { challengeMode: ChallengeMode }) {
-  const level = getLevel(challengeMode.chapterId, challengeMode.levelId);
-  if (!level) return null;
+  embed,
+}: Omit<ChallengePanelProps, 'challengeMode' | 'level' | 'onOpenBuilder'> & {
+  challengeMode: ChallengeMode;
+  level: Level;
+}) {
+  // Un exercice reçu par URL ne fait pas partie du catalogue : ni retour à la
+  // liste, ni « niveau suivant ».
+  const fromUrl = !!challengeMode.level;
   return (
     <div className="space-y-3 flex-1">
-      <button onClick={onBack} className="text-xs text-stone-600 hover:text-stone-900">
-        ← Retour
-      </button>
+      {!embed && !fromUrl && (
+        <button onClick={onBack} className="text-xs text-stone-600 hover:text-stone-900">
+          ← Retour
+        </button>
+      )}
       <div>
         <h3 className="font-bold text-sm mb-1">{level.title}</h3>
         <p className="text-[11px] text-stone-500 leading-snug">
@@ -126,11 +157,16 @@ function LevelView({
           <div className="p-2 rounded text-xs bg-green-100 text-green-800 font-bold">
             ✓ Réussi !
           </div>
-          <NextLevelButton challengeMode={challengeMode} onStartLevel={onStartLevel} />
+          {!fromUrl && (
+            <NextLevelButton challengeMode={challengeMode} onStartLevel={onStartLevel} />
+          )}
         </div>
       ) : (
         <div className="space-y-2 flex-1 flex flex-col">
           <div className="p-2 rounded text-xs bg-red-100 text-red-800 font-bold">✗ Échoué</div>
+          {challengeMode.error && (
+            <div className="text-[11px] text-red-700">{challengeMode.error}</div>
+          )}
           {challengeMode.table && (
             <div className="text-xs overflow-y-auto flex-1 border rounded bg-stone-50">
               <table className="w-full border-collapse">

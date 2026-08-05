@@ -9,6 +9,8 @@ import {
 import { getLevel } from './challenges';
 import { verifyChallenge as verifyChallengeCore } from './lib/challenge-verify';
 import { buildCustomDefData } from './lib/custom-def';
+import { readUrlContext } from './lib/url-params';
+import { URL_CHAPTER_ID, URL_LEVEL_ID } from './lib/challenge-url';
 import { GRID, INPUT_BUS_CELL_SIZE } from './lib/constants';
 import { GATES } from './gates';
 import {
@@ -26,6 +28,7 @@ import { DeleteDefinitionModal } from './components/DeleteDefinitionModal';
 import { RightPanel } from './components/RightPanel';
 import { PalettePanel } from './components/PalettePanel';
 import { ChallengePanel } from './components/ChallengePanel';
+import { ChallengeBuilderModal } from './components/ChallengeBuilderModal';
 import { ChallengeBanner } from './components/ChallengeBanner';
 import { CircuitCanvas } from './components/CircuitCanvas';
 import { PaletteDragGhost } from './components/PaletteDragGhost';
@@ -45,6 +48,7 @@ import type {
   TabsState,
   Wire,
 } from './domain/types';
+import type { Level } from './challenges';
 import type { SaveAsCompState } from './components/SaveAsComponentModal';
 import type { ChallengeMode, ChallengeRow } from './components/ChallengePanel';
 import type { ComponentPatch } from './components/PropertiesPanel';
@@ -111,6 +115,12 @@ function makeEmptyTab(name = 'Nouveau circuit'): Tab {
 }
 
 export default function CircuitSimulator() {
+  // -------- CONTEXTE D'URL --------
+  // Lu une seule fois au montage : exercice encodé (?ex=), mode embed (&embed=1),
+  // et la clé d'autosave qui en découle. Voir lib/url-params.
+  const urlCtx = useMemo(() => readUrlContext(), []);
+  const embed = urlCtx.embed;
+
   // -------- ÉTAT --------
   // Plusieurs onglets ("zones de travail") : on garde un tableau de tabs et un
   // activeTabId. Les composants personnalisés (customDefinitions) sont partagés
@@ -188,9 +198,32 @@ export default function CircuitSimulator() {
   const [deletePromptName, setDeletePromptName] = useState<string | null>(null);
 
   // ---- Mode Challenge ----
-  const [challengeMode, setChallengeMode] = useState<ChallengeMode | null>(null);
+  // Un exercice passé par l'URL démarre directement en mode challenge (le
+  // canevas est de toute façon vide au montage).
+  const [challengeMode, setChallengeMode] = useState<ChallengeMode | null>(() =>
+    urlCtx.level
+      ? {
+          chapterId: URL_CHAPTER_ID,
+          levelId: URL_LEVEL_ID,
+          level: urlCtx.level,
+          result: null,
+          error: null,
+          table: null,
+        }
+      : null,
+  );
   // leftPanelMode: 'palette' | 'challenges'
-  const [leftPanelMode, setLeftPanelMode] = useState('palette');
+  const [leftPanelMode, setLeftPanelMode] = useState(urlCtx.level ? 'challenges' : 'palette');
+  // Modale de création d'exercice partageable (générateur d'URL).
+  const [builderOpen, setBuilderOpen] = useState(false);
+
+  // Niveau courant : soit l'exercice de l'URL (porté par challengeMode), soit un
+  // niveau du catalogue. Résolu ici pour que les composants d'affichage restent
+  // purement présentationnels.
+  const currentLevel = useMemo(() => {
+    if (!challengeMode) return null;
+    return challengeMode.level ?? getLevel(challengeMode.chapterId, challengeMode.levelId) ?? null;
+  }, [challengeMode]);
 
   // ---- Préférences d'apparence (chargement/sauvegarde gérés par le hook) ----
   const [prefs, setPrefs] = usePrefs();
@@ -239,7 +272,7 @@ export default function CircuitSimulator() {
   } = useViewport();
 
   // -------- AUTO-SAUVEGARDE du circuit --------
-  useAutosave(tabsState, setTabsState, editMode, serializeAll, deserializeAll);
+  useAutosave(tabsState, setTabsState, editMode, serializeAll, deserializeAll, urlCtx.storageKey);
 
   // -------- PANNEAU DROIT : ouverture/fermeture auto --------
   // Sélectionner un composant ouvre « Propriétés » ; cliquer à côté (désélection)
@@ -323,9 +356,17 @@ export default function CircuitSimulator() {
   // fait que résoudre le niveau courant et déléguer.
   const verifyChallenge = (): { success: boolean; error?: string; table?: ChallengeRow[] } => {
     if (!challengeMode) return { success: false, error: 'Pas en challenge' };
-    const level = getLevel(challengeMode.chapterId, challengeMode.levelId);
-    if (!level) return { success: false, error: 'Niveau non trouvé' };
-    return verifyChallengeCore(circuit, level, getDef);
+    if (!currentLevel) return { success: false, error: 'Niveau non trouvé' };
+    return verifyChallengeCore(circuit, currentLevel, getDef);
+  };
+
+  // Générateur d'exercices : simule le circuit de l'onglet courant sur toutes les
+  // lignes du brouillon et renvoie les sorties obtenues, pour pré-remplir la
+  // table attendue. `stopOnFirstFailure: false` → on veut TOUTES les lignes.
+  const computeExerciseOutputs = (draft: Level): { rows: number[][] } | { error: string } => {
+    const res = verifyChallengeCore(circuit, draft, getDef, { stopOnFirstFailure: false });
+    if (!res.table) return { error: res.error ?? 'Simulation impossible' };
+    return { rows: res.table.map((r) => r.actualOutVals) };
   };
 
   const toggleInput = (id: string) => {
@@ -1181,6 +1222,7 @@ export default function CircuitSimulator() {
         canEncapsulate={canEncapsulate}
         editMode={!!editMode}
         onCancelEdit={cancelEdit}
+        embed={embed}
         viewBox={viewBox}
         viewBoxBase={viewBoxBaseRef.current}
         onResetView={resetView}
@@ -1198,17 +1240,19 @@ export default function CircuitSimulator() {
         wireWidthMismatch={wireWidthMismatch}
       />
 
-      {/* ===== BARRE D'ONGLETS ===== */}
-      <TabsBar
-        tabs={tabsState.tabs}
-        activeTabId={tabsState.activeTabId}
-        editMode={!!editMode}
-        maxTabs={MAX_TABS}
-        onSwitch={switchTab}
-        onRename={renameTab}
-        onClose={closeTab}
-        onAdd={addTab}
-      />
+      {/* ===== BARRE D'ONGLETS ===== (masquée en mode embed : une seule zone de travail) */}
+      {!embed && (
+        <TabsBar
+          tabs={tabsState.tabs}
+          activeTabId={tabsState.activeTabId}
+          editMode={!!editMode}
+          maxTabs={MAX_TABS}
+          onSwitch={switchTab}
+          onRename={renameTab}
+          onClose={closeTab}
+          onAdd={addTab}
+        />
+      )}
 
       {/* ===== ZONE PRINCIPALE ===== */}
       <div className="flex-1 flex overflow-hidden">
@@ -1216,6 +1260,9 @@ export default function CircuitSimulator() {
         {leftPanelMode === 'challenges' ? (
           <ChallengePanel
             challengeMode={challengeMode}
+            level={currentLevel}
+            embed={embed}
+            onOpenBuilder={() => setBuilderOpen(true)}
             onBack={() => setChallengeMode(null)}
             onStartLevel={(chapterId, levelId) => {
               setCircuit({
@@ -1275,10 +1322,9 @@ export default function CircuitSimulator() {
           )}
 
           {/* Bandeau de consigne du challenge (au-dessus du canevas, repliable) */}
-          {!editMode && challengeMode && (
+          {!editMode && challengeMode && currentLevel && (
             <ChallengeBanner
-              chapterId={challengeMode.chapterId}
-              levelId={challengeMode.levelId}
+              level={currentLevel}
               collapsed={consigneCollapsed}
               onToggleCollapsed={() => setConsigneCollapsed((c) => !c)}
             />
@@ -1351,6 +1397,15 @@ export default function CircuitSimulator() {
           nameExists={!editMode && !!circuit.customDefinitions?.[saveAsCompState.name.trim()]}
           onClose={() => setSaveAsCompState(null)}
           onConfirm={confirmSaveAsComp}
+        />
+      )}
+
+      {/* === MODALE CRÉATION D'EXERCICE PARTAGEABLE === */}
+      {builderOpen && (
+        <ChallengeBuilderModal
+          circuit={circuit}
+          computeOutputs={computeExerciseOutputs}
+          onClose={() => setBuilderOpen(false)}
         />
       )}
 
