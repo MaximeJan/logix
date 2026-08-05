@@ -34,6 +34,9 @@ src/
                            uprightTransform, widthForBits, addrBitsFor, roundedRectPath
     constants.ts           GRID, PORT_R, STORAGE_KEY, PALETTE_ORDER, DEFAULT_PREFS…
     bits.ts, storage.ts    formatBitsGrouped ; adaptateur de stockage
+    challenge-verify.ts    verifyChallenge(circuit, level, getDef, options)
+    challenge-url.ts       encode/decodeChallenge, buildExerciseUrl, payloadHash
+    url-params.ts          readUrlContext() : ?ex=… &embed=1 → { level, embed, storageKey }
   challenges.ts            données des niveaux (typées) + getLevel/getAllLevels
   gates/                   définitions des composants primitifs :
     types.ts               interfaces GateDef / DynamicGeometry (dont `fixedDisplay`)
@@ -54,7 +57,7 @@ src/
     Toolbar, TabsBar, TabButton, PalettePanel, PaletteItem, ChallengePanel,
     ChallengeBanner, CircuitCanvas, RightPanel, PropertiesPanel, TruthTablePanel,
     ChronogramPanel, PreferencesPanel, BusWidthControl, HoverTooltip,
-    SaveAsComponentModal, DeleteDefinitionModal, ui.tsx
+    SaveAsComponentModal, DeleteDefinitionModal, ChallengeBuilderModal, ui.tsx
     properties/            sections de PropertiesPanel (RamSection, LedMatrixSection)
   hooks/                   logique d'état réutilisable :
     usePrefs, useTrace, useCircuitEngine, useHistory, useAutosave,
@@ -108,6 +111,27 @@ Quand un composant a une géométrie dépendant de son état (bus, splitter à N
 
 Le **chronogramme** est géré par `hooks/useTrace.ts`, l'**historique par onglet** (undo/redo + `commit`) par `hooks/useHistory.ts`, l'**autosave** par `hooks/useAutosave.ts`, le **zoom/pan** par `hooks/useViewport.ts`, les **raccourcis clavier** par `hooks/useKeyboardShortcuts.ts`, les **préférences** par `hooks/usePrefs.ts`.
 
+### Exercices partageables par URL
+
+Un exercice sur mesure tient entièrement dans l'URL — l'app reste 100 % statique.
+
+- `?ex=<base64url>` porte un `Level` complet (titre, objectif, étapes, `allowedTypes`, ports,
+  table de vérité ou séquence), encodé par `encodeChallenge` avec des clés d'une lettre pour
+  garder l'URL courte. `&embed=1` allège l'UI pour l'iframe.
+- **Le payload est une donnée non fiable** : `decodeChallenge` ne lève jamais, assainit tout
+  (plafonds de taille, largeurs clampées 1-32, `allowedTypes` filtrés contre `GATES`) et renvoie
+  `null` au moindre doute — l'app démarre alors normalement.
+- `readUrlContext()` (`lib/url-params.ts`) est lu **une seule fois** dans un `useMemo(…, [])` de
+  l'orchestrateur : pas de routeur, pas de réaction aux changements d'URL.
+- Un exercice-URL a sa **propre clé d'autosave** (`circuit:autosave:ex:<hash>`, `payloadHash`) :
+  le bac à sable de l'élève n'est jamais écrasé et un rafraîchissement conserve son travail.
+- `ChallengeMode.level` porte le niveau ad hoc. L'orchestrateur résout `currentLevel`
+  (`challengeMode.level ?? getLevel(...)`) et le passe en prop à `ChallengePanel` /
+  `ChallengeBanner`, qui restent purement présentationnels.
+- `ChallengeBuilderModal` génère ces URLs. Son bouton « Remplir les sorties depuis le circuit
+  courant » appelle `verifyChallenge(..., { stopOnFirstFailure: false })` et récupère les
+  `actualOutVals` de toutes les lignes.
+
 **Le rendu du canevas** (`components/CircuitCanvas.tsx`) dessine la grille, les fils, les composants et les ports ; c'est un composant présentationnel piloté par les props/handlers de l'orchestrateur. **Le rendu des fils bus** utilise `makeBusTracks(points, n, pitch)` qui appelle `offsetManhattan(points, offset)` pour chaque piste — les premiers/derniers sommets restent fixes, les pistes convergent en éventail aux ports.
 
 ### Composants rectangulaires « à dessin fixe » (`fixedDisplay`)
@@ -153,6 +177,10 @@ Voir `ROADMAP.md` pour le détail. Très brièvement :
 - **Les fils orphelins** après changement de largeur sont nettoyés par `updateComponent` via le flag `_dropMismatchedWires: true` dans le patch. Si tu ajoutes un composant à géométrie variable, pense à ce flag dans son sélecteur de largeur.
 - **L'éditeur de composant custom** entre en `editMode` et travaille sur un circuit séparé ; au commit il reconstruit la définition. Le banner ambré indique le mode édition. L'autosave est suspendu pendant l'édition.
 - **Le toggle 1-bit d'une INPUT** passe par `toggleInput`. Le clic sur un bit d'INPUT bus passe par `toggleInputBit(id, bitIdx)` ; la détection du bit cliqué est géométrique (position locale ÷ `INPUT_BUS_CELL_SIZE`).
+- **Autosave et exercices-URL** : `useAutosave(..., storageKey)` charge ET écrit sur la clé qu'on
+  lui passe. Si tu ajoutes une source de circuit au démarrage, souviens-toi que le chargement est
+  asynchrone et écraserait ton état — passe par une clé dédiée plutôt que par un `useEffect` de
+  course.
 - **Refs lues en rendu** (curseur du canevas, aperçu de câblage, ref-getter d'historique) : intentionnel. Les règles ESLint « React Compiler » correspondantes (`react-hooks/refs`, `react-hooks/immutability`, `react-hooks/set-state-in-effect`) sont désactivées dans `eslint.config.js` avec justification.
 
 ## Quand ajouter un nouveau composant

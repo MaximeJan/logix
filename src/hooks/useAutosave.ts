@@ -8,17 +8,21 @@ import type { TabsState } from '../domain/types';
 // composant custom on n'écrit pas (sinon un rechargement perdrait le circuit
 // principal, conservé dans editMode.backupCircuit). serialize/deserialize sont
 // injectés car ils dépendent du registre de types (isKnownType) et de `uid`.
+//
+// `storageKey` permet d'isoler une session : un exercice ouvert par URL utilise
+// sa propre clé, pour ne jamais écraser le bac à sable personnel de l'élève.
 export function useAutosave(
   tabsState: TabsState,
   setTabsState: (state: TabsState) => void,
   editMode: unknown,
   serializeAll: (state: TabsState) => unknown,
   deserializeAll: (data: unknown) => TabsState,
+  storageKey: string = STORAGE_KEY,
 ) {
   useEffect(() => {
     (async () => {
       try {
-        const r = await storage.get(STORAGE_KEY);
+        const r = await storage.get(storageKey);
         if (r?.value) {
           setTabsState(deserializeAll(JSON.parse(r.value)));
         }
@@ -33,7 +37,7 @@ export function useAutosave(
     if (editMode) return;
     const t = setTimeout(() => {
       try {
-        storage.set(STORAGE_KEY, JSON.stringify(serializeAll(tabsState)));
+        storage.set(storageKey, JSON.stringify(serializeAll(tabsState)));
       } catch {
         // ignore
       }

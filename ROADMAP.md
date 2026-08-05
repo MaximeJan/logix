@@ -53,9 +53,21 @@ Décisions à prendre quand on y arrive :
 - Mode pas-à-pas (utilise le « Tick » sur l'horloge système) vs auto-run
 - Éventuel petit assembleur côté UI pour écrire du code et le charger en mémoire
 
+## ✅ Exercices partageables par URL (terminé)
+
+L'enseignant compose un exercice depuis l'app (« Challenges » → « Créer un exercice ») : énoncé,
+composants proposés, ports attendus, table de vérité ou séquence. Tout est encodé dans le lien
+(`?ex=…`), donc aucun backend et rien à redéployer. La table peut être générée automatiquement
+(jusqu'à 8 bits d'entrée) et remplie en simulant le circuit de l'onglet courant.
+
+`&embed=1` allège l'UI (ni onglets, ni import/export, ni encapsulation) pour embarquer Logix en
+iframe dans un site de théorie. Chaque exercice a sa propre sauvegarde locale : le bac à sable de
+l'élève n'est jamais écrasé.
+
 ## Idées hors phase
 
-- Mode « test automatique » : l'enseignant pose un cahier des charges (table de vérité ou séquence de signaux), l'élève construit le circuit, le simulateur valide.
+- Signaler la réussite au site parent (`postMessage`) pour qu'il coche la progression de l'élève.
+- Suivi de progression : mémoriser les niveaux déjà réussis.
 - Export d'un circuit comme image PNG/SVG.
 - Mode présentation (plein écran, sans palette ni outils) pour projeter au tableau.
 - Hub de partage de circuits entre élèves (nécessite un backend, hors scope actuel).
