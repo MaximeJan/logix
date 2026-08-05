@@ -55,19 +55,19 @@ Décisions à prendre quand on y arrive :
 
 ## ✅ Exercices partageables par URL (terminé)
 
-L'enseignant compose un exercice depuis l'app (« Challenges » → « Créer un exercice ») : énoncé,
-composants proposés, ports attendus, table de vérité ou séquence. Tout est encodé dans le lien
-(`?ex=…`), donc aucun backend et rien à redéployer. La table peut être générée automatiquement
-(jusqu'à 8 bits d'entrée) et remplie en simulant le circuit de l'onglet courant.
+L'enseignant compose un exercice depuis l'app (« Créer un exercice » dans la barre d'outils) :
+énoncé, composants proposés, ports attendus, et table de vérité, séquence ou aucune vérification.
+Tout est encodé dans le lien (`?ex=…`), donc aucun backend et rien à redéployer. La table peut être
+générée automatiquement (jusqu'à 8 bits d'entrée) et remplie en simulant le circuit de l'onglet
+courant. Il n'y a **pas** de catalogue d'exercices : un exercice n'existe que dans son lien.
 
-`&embed=1` allège l'UI (ni onglets, ni import/export, ni encapsulation) pour embarquer Logix en
-iframe dans un site de théorie. Chaque exercice a sa propre sauvegarde locale : le bac à sable de
-l'élève n'est jamais écrasé.
+`&embed=1` allège l'UI (ni onglets, ni import, ni encapsulation, panneau de consigne compact) pour
+embarquer Logix en iframe dans un site de théorie ; le téléchargement du circuit y reste possible.
+Chaque exercice a sa propre sauvegarde locale : le bac à sable de l'élève n'est jamais écrasé.
 
 ## Idées hors phase
 
 - Signaler la réussite au site parent (`postMessage`) pour qu'il coche la progression de l'élève.
-- Suivi de progression : mémoriser les niveaux déjà réussis.
 - Export d'un circuit comme image PNG/SVG.
 - Mode présentation (plein écran, sans palette ni outils) pour projeter au tableau.
 - Hub de partage de circuits entre élèves (nécessite un backend, hors scope actuel).

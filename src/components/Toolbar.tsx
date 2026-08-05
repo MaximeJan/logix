@@ -9,7 +9,7 @@ import {
   Trash2,
   Package,
   X,
-  Trophy,
+  Link2,
 } from 'lucide-react';
 import logixLogo from '../assets/logix_text.svg';
 import { ToolbarButton, Separator, SettingsIcon } from './ui';
@@ -33,13 +33,12 @@ interface ToolbarProps {
   canEncapsulate: boolean;
   editMode: boolean;
   onCancelEdit: () => void;
-  /** Mode embed (iframe) : masque fichiers, encapsulation et bascule Challenges. */
+  /** Mode embed (iframe) : masque import, encapsulation et générateur d'exercice. */
   embed?: boolean;
   viewBox: ViewBox | null;
   viewBoxBase: { w: number; h: number } | null;
   onResetView: () => void;
-  challengesOpen: boolean;
-  onToggleChallenges: () => void;
+  onOpenBuilder: () => void;
   preferencesOpen: boolean;
   onTogglePreferences: () => void;
   hasManualClock: boolean;
@@ -49,7 +48,7 @@ interface ToolbarProps {
 }
 
 // Barre d'outils du haut : logo, actions fichier (save/load), undo/redo, copier/
-// coller/supprimer, encapsulation, reset vue, et les bascules Challenges/Apparence.
+// coller/supprimer, encapsulation, reset vue, générateur d'exercice et Apparence.
 // Composant purement présentationnel — l'orchestrateur fournit états et callbacks.
 export function Toolbar({
   onSave,
@@ -73,8 +72,7 @@ export function Toolbar({
   viewBox,
   viewBoxBase,
   onResetView,
-  challengesOpen,
-  onToggleChallenges,
+  onOpenBuilder,
   preferencesOpen,
   onTogglePreferences,
   hasManualClock,
@@ -93,11 +91,13 @@ export function Toolbar({
         <img src={logixLogo} alt="Logix" className="h-7 w-auto select-none" draggable={false} />
       </div>
 
+      {/* Télécharger reste disponible en iframe : l'élève doit pouvoir rendre sa
+          solution. Le chargement d'un JSON, lui, est réservé au site complet. */}
+      <ToolbarButton onClick={onSave} title="Télécharger le circuit en JSON (Ctrl+S)">
+        <Save size={16} />
+      </ToolbarButton>
       {!embed && (
         <>
-          <ToolbarButton onClick={onSave} title="Enregistrer en JSON (Ctrl+S)">
-            <Save size={16} />
-          </ToolbarButton>
           <ToolbarButton onClick={() => fileInputRef.current?.click()} title="Charger un JSON">
             <Upload size={16} />
           </ToolbarButton>
@@ -113,10 +113,10 @@ export function Toolbar({
               }
             }}
           />
-
-          <Separator />
         </>
       )}
+
+      <Separator />
 
       <ToolbarButton onClick={onUndo} title="Annuler (Ctrl+Z)" disabled={!canUndo}>
         <Undo2 size={16} />
@@ -191,15 +191,11 @@ export function Toolbar({
 
       {!embed && (
         <button
-          onClick={onToggleChallenges}
-          className={`px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium transition ${
-            challengesOpen
-              ? 'bg-amber-500 text-white hover:bg-amber-600'
-              : 'text-stone-700 hover:bg-stone-100'
-          }`}
-          title="Niveaux de challenge (apprentissage progressif)"
+          onClick={onOpenBuilder}
+          className="px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium text-stone-700 hover:bg-stone-100 transition"
+          title="Composer un exercice sur mesure et obtenir son lien partageable"
         >
-          <Trophy size={14} /> Challenges
+          <Link2 size={14} /> Créer un exercice
         </button>
       )}
 

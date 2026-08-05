@@ -26,6 +26,7 @@ src/
   domain/
     types.ts               types du domaine (Circuit, CircuitComponent, Wire,
                            ResolvedDef, Selection, SimResult, Prefs côté lib…)
+    exercise.ts            Exercise, ExercisePort, IoRow, Verify (tt | seq | none)
   lib/                     logique pure & utilitaires, SANS React :
     sim.ts                 simulate(), stepSequential(), asInt, maskTo, portKey,
                            applyOrientation, SEG7_HEX_TABLE
@@ -34,10 +35,9 @@ src/
                            uprightTransform, widthForBits, addrBitsFor, roundedRectPath
     constants.ts           GRID, PORT_R, STORAGE_KEY, PALETTE_ORDER, DEFAULT_PREFS…
     bits.ts, storage.ts    formatBitsGrouped ; adaptateur de stockage
-    challenge-verify.ts    verifyChallenge(circuit, level, getDef, options)
-    challenge-url.ts       encode/decodeChallenge, buildExerciseUrl, payloadHash
-    url-params.ts          readUrlContext() : ?ex=… &embed=1 → { level, embed, storageKey }
-  challenges.ts            données des niveaux (typées) + getLevel/getAllLevels
+    exercise-verify.ts     verifyExercise(circuit, exercise, getDef, options)
+    exercise-url.ts        encode/decodeExercise, buildExerciseUrl, payloadHash
+    url-params.ts          readUrlContext() : ?ex=… &embed=1 → { exercise, embed, storageKey }
   gates/                   définitions des composants primitifs :
     types.ts               interfaces GateDef / DynamicGeometry (dont `fixedDisplay`)
     shared.tsx             helpers de rendu partagés (bitCells, seg7Layout)
@@ -54,16 +54,17 @@ src/
     registry.tsx           getDef, buildCustomDef, typeReferences, getPortPosition,
                            getPortWidth, et le wrapper simulate(circuit)
   components/              présentation (.tsx) :
-    Toolbar, TabsBar, TabButton, PalettePanel, PaletteItem, ChallengePanel,
-    ChallengeBanner, CircuitCanvas, RightPanel, PropertiesPanel, TruthTablePanel,
+    Toolbar, TabsBar, TabButton, PalettePanel, PaletteItem, ExercisePanel,
+    CircuitCanvas, RightPanel, PropertiesPanel, TruthTablePanel,
     ChronogramPanel, PreferencesPanel, BusWidthControl, HoverTooltip,
-    SaveAsComponentModal, DeleteDefinitionModal, ChallengeBuilderModal, ui.tsx
+    SaveAsComponentModal, DeleteDefinitionModal, ExerciseBuilderModal, ui.tsx
     properties/            sections de PropertiesPanel (RamSection, LedMatrixSection)
   hooks/                   logique d'état réutilisable :
     usePrefs, useTrace, useCircuitEngine, useHistory, useAutosave,
     useViewport, useKeyboardShortcuts
 tests/                     Vitest (.mjs) : sim-core (importe la VRAIE GATES),
-                           geometry, bits, registry, run.test (logique + persist)
+                           geometry, bits, registry, custom-def, exercise-url,
+                           exercise-verify, run.test (logique + persist)
 ```
 
 ## Comment développer
@@ -113,24 +114,49 @@ Le **chronogramme** est géré par `hooks/useTrace.ts`, l'**historique par ongle
 
 ### Exercices partageables par URL
 
-Un exercice sur mesure tient entièrement dans l'URL — l'app reste 100 % statique.
+**Il n'y a pas de catalogue d'exercices dans l'app.** Un exercice n'existe que dans une URL :
+l'enseignant le compose via « Créer un exercice » (barre d'outils) et partage le lien ou l'iframe.
+L'app reste 100 % statique.
 
-- `?ex=<base64url>` porte un `Level` complet (titre, objectif, étapes, `allowedTypes`, ports,
-  table de vérité ou séquence), encodé par `encodeChallenge` avec des clés d'une lettre pour
+- `?ex=<base64url>` porte un `Exercise` complet (titre, objectif, étapes, `allowedTypes`, ports,
+  table de vérité / séquence / rien), encodé par `encodeExercise` avec des clés d'une lettre pour
   garder l'URL courte. `&embed=1` allège l'UI pour l'iframe.
-- **Le payload est une donnée non fiable** : `decodeChallenge` ne lève jamais, assainit tout
+- **Le payload est une donnée non fiable** : `decodeExercise` ne lève jamais, assainit tout
   (plafonds de taille, largeurs clampées 1-32, `allowedTypes` filtrés contre `GATES`) et renvoie
   `null` au moindre doute — l'app démarre alors normalement.
 - `readUrlContext()` (`lib/url-params.ts`) est lu **une seule fois** dans un `useMemo(…, [])` de
-  l'orchestrateur : pas de routeur, pas de réaction aux changements d'URL.
+  l'orchestrateur : pas de routeur, pas de réaction aux changements d'URL. `urlCtx.exercise` est
+  donc constant pour toute la session ; l'orchestrateur ne garde que le verdict
+  (`exerciseResult`).
 - Un exercice-URL a sa **propre clé d'autosave** (`circuit:autosave:ex:<hash>`, `payloadHash`) :
   le bac à sable de l'élève n'est jamais écrasé et un rafraîchissement conserve son travail.
-- `ChallengeMode.level` porte le niveau ad hoc. L'orchestrateur résout `currentLevel`
-  (`challengeMode.level ?? getLevel(...)`) et le passe en prop à `ChallengePanel` /
-  `ChallengeBanner`, qui restent purement présentationnels.
-- `ChallengeBuilderModal` génère ces URLs. Son bouton « Remplir les sorties depuis le circuit
-  courant » appelle `verifyChallenge(..., { stopOnFirstFailure: false })` et récupère les
-  `actualOutVals` de toutes les lignes.
+- `ExerciseBuilderModal` génère ces URLs. Son bouton « Remplir les sorties depuis le circuit
+  courant » appelle `verifyExercise(..., { stopOnFirstFailure: false })` et récupère les
+  `actualOutVals` de toutes les lignes. Il propose aussi la hauteur (px) de l'extrait `<iframe>`,
+  et ne produit que **deux** champs à copier : « Lien de l'exercice » et « `<iframe>` ».
+- En mode embed, le bouton **Télécharger** (JSON) reste dans la barre d'outils : l'élève doit
+  pouvoir rendre sa solution. Seul le *chargement* d'un JSON est masqué.
+
+**Trois modes de vérification** (`Verify` dans `domain/exercise.ts`) : `truthtable`, `sequence`,
+et `none`. Avec `none`, l'exercice n'a ni ports ni lignes obligatoires — `decodeExercise` n'exige
+qu'un titre, `verifyExercise` renvoie `{ success: true, table: [] }` sans rien simuler, et le
+panneau n'affiche aucun bouton « Vérifier ». C'est le mode « énoncé libre ».
+
+### Consigne d'un exercice : panneau gauche uniquement
+
+Toute la consigne (titre, objectif, étapes numérotées, entrées/sorties attendues) vit dans
+`ExercisePanel` — il n'y a **pas** de bandeau au-dessus du canevas, qui reste entièrement
+disponible. Le panneau est un `flex-col` : la consigne + les composants défilent, et le pied
+(Vérifier / résultat / table des écarts) est **épinglé** en bas, donc toujours atteignable même
+dans une iframe basse.
+
+`SCALE` (dans `ExercisePanel.tsx`) définit deux échelles : `normal` (site) et `compact` (embed).
+En embed tout le contenu du panneau est réduit de moitié — la largeur `w-52` ne change pas, pour
+que la consigne reste lisible. `PaletteItem` accepte `compact` pour la même raison (aperçu 28 px
+au lieu de 56, libellé `text-[10px]`).
+
+Le panneau gauche est l'un ou l'autre, sans bascule : `ExercisePanel` si l'URL portait un
+exercice, `PalettePanel` sinon.
 
 **Le rendu du canevas** (`components/CircuitCanvas.tsx`) dessine la grille, les fils, les composants et les ports ; c'est un composant présentationnel piloté par les props/handlers de l'orchestrateur. **Le rendu des fils bus** utilise `makeBusTracks(points, n, pitch)` qui appelle `offsetManhattan(points, offset)` pour chaque piste — les premiers/derniers sommets restent fixes, les pistes convergent en éventail aux ports.
 

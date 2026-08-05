@@ -1,4 +1,4 @@
-// Encodage / décodage d'un exercice (Level) dans une URL — logique pure, sans React.
+// Encodage / décodage d'un exercice dans une URL — logique pure, sans React.
 //
 // But : un enseignant peut fabriquer un exercice sur mesure et le partager par un
 // simple lien (ou l'embarquer en iframe dans un site de théorie), sans backend et
@@ -6,14 +6,14 @@
 //
 // Format « fil » (clés d'une lettre pour garder l'URL courte) :
 //   { v:1, t:titre, o:objectif, s:[étapes], a:[typesAutorisés],
-//     i:[[nom,largeur]], u:[[nom,largeur]], k:'tt'|'seq', r:[[[in],[out]]] }
+//     i:[[nom,largeur]], u:[[nom,largeur]], k:'tt'|'seq'|'none', r:[[[in],[out]]] }
 // puis JSON → UTF-8 → base64url.
 //
-// Le payload vient de l'URL : c'est une donnée NON FIABLE. `decodeChallenge` ne
+// Le payload vient de l'URL : c'est une donnée NON FIABLE. `decodeExercise` ne
 // lève jamais et assainit tout (plafonds de taille, largeurs clampées, types de
 // composants filtrés contre GATES). En cas de doute il renvoie null.
 
-import type { IoRow, Level, Verify } from '../challenges';
+import type { Exercise, IoRow, Verify } from '../domain/exercise';
 
 /** Version du format d'exercice transporté par l'URL. */
 export const EXERCISE_FORMAT_VERSION = 1;
@@ -22,10 +22,6 @@ export const EXERCISE_FORMAT_VERSION = 1;
 export const EXERCISE_PARAM = 'ex';
 /** Nom du paramètre d'URL activant l'UI allégée (iframe). */
 export const EMBED_PARAM = 'embed';
-
-/** Identifiants attribués à un exercice venu d'une URL (il n'est dans aucun chapitre). */
-export const URL_CHAPTER_ID = 'url';
-export const URL_LEVEL_ID = 'custom';
 
 // Plafonds d'assainissement — largement au-dessus d'un usage pédagogique normal,
 // mais suffisants pour empêcher une URL forgée de faire ramer l'app.
@@ -63,6 +59,7 @@ function fromBase64Url(s: string): string {
 // ---------------------------------------------------------------- encodage
 
 type WirePort = [string, number];
+type WireKind = 'tt' | 'seq' | 'none';
 
 interface WireExercise {
   v: number;
@@ -72,22 +69,30 @@ interface WireExercise {
   a: string[];
   i: WirePort[];
   u: WirePort[];
-  k: 'tt' | 'seq';
+  k: WireKind;
   r: IoRow[];
 }
 
-/** Sérialise un niveau en chaîne base64url à mettre dans `?ex=`. */
-export function encodeChallenge(level: Level): string {
-  const rows = level.verify.type === 'sequence' ? level.verify.steps : (level.truthTable ?? []);
+const wireKind = (v: Verify): WireKind =>
+  v.type === 'sequence' ? 'seq' : v.type === 'none' ? 'none' : 'tt';
+
+/** Sérialise un exercice en chaîne base64url à mettre dans `?ex=`. */
+export function encodeExercise(exercise: Exercise): string {
+  const rows =
+    exercise.verify.type === 'sequence'
+      ? exercise.verify.steps
+      : exercise.verify.type === 'truthtable'
+        ? (exercise.truthTable ?? [])
+        : [];
   const wire: WireExercise = {
     v: EXERCISE_FORMAT_VERSION,
-    t: level.title,
-    o: level.objective,
-    s: level.steps,
-    a: level.allowedTypes,
-    i: level.inputs.map((p): WirePort => [p.name, p.width]),
-    u: level.outputs.map((p): WirePort => [p.name, p.width]),
-    k: level.verify.type === 'sequence' ? 'seq' : 'tt',
+    t: exercise.title,
+    o: exercise.objective,
+    s: exercise.steps,
+    a: exercise.allowedTypes,
+    i: exercise.inputs.map((p): WirePort => [p.name, p.width]),
+    u: exercise.outputs.map((p): WirePort => [p.name, p.width]),
+    k: wireKind(exercise.verify),
     r: rows,
   };
   const bytes = new TextEncoder().encode(JSON.stringify(wire));
@@ -145,11 +150,11 @@ export interface DecodeOptions {
 }
 
 /**
- * Décode le paramètre `?ex=` en un `Level` utilisable tel quel par
- * `verifyChallenge`. Renvoie `null` si le payload est absent, corrompu, d'une
+ * Décode le paramètre `?ex=` en un `Exercise` utilisable tel quel par
+ * `verifyExercise`. Renvoie `null` si le payload est absent, corrompu, d'une
  * version inconnue, ou s'il ne décrit pas un exercice exploitable.
  */
-export function decodeChallenge(payload: string, opts: DecodeOptions = {}): Level | null {
+export function decodeExercise(payload: string, opts: DecodeOptions = {}): Exercise | null {
   if (!payload || payload.length > MAX_PAYLOAD) return null;
 
   let data: unknown;
@@ -163,29 +168,29 @@ export function decodeChallenge(payload: string, opts: DecodeOptions = {}): Leve
   if (!isObj(data) || data.v !== EXERCISE_FORMAT_VERSION) return null;
 
   const isKnownType = opts.isKnownType ?? (() => true);
-  const allowedTypes = textList(data.a, MAX_PORTS * 4).filter(isKnownType);
-  const inputs = parsePorts(data.i);
-  const outputs = parsePorts(data.u);
-  const rows = parseRows(data.r);
   const title = text(data.t);
+  // Un exercice sans titre n'est pas exploitable, quel que soit son mode.
+  if (!title) return null;
 
-  // Un exercice sans titre, sans port ou sans ligne de vérification n'est pas jouable.
-  if (!title || inputs.length === 0 || outputs.length === 0 || rows.length === 0) return null;
+  const base = {
+    title,
+    objective: text(data.o),
+    steps: textList(data.s, MAX_STEPS),
+    allowedTypes: textList(data.a, MAX_PORTS * 4).filter(isKnownType),
+    inputs: parsePorts(data.i),
+    outputs: parsePorts(data.u),
+  };
+
+  // Exercice libre : ni ports ni lignes obligatoires, pas de bouton « Vérifier ».
+  if (data.k === 'none') return { ...base, verify: { type: 'none' } };
+
+  const rows = parseRows(data.r);
+  if (base.inputs.length === 0 || base.outputs.length === 0 || rows.length === 0) return null;
 
   const sequence = data.k === 'seq';
   const verify: Verify = sequence ? { type: 'sequence', steps: rows } : { type: 'truthtable' };
 
-  return {
-    id: URL_LEVEL_ID,
-    title,
-    objective: text(data.o),
-    steps: textList(data.s, MAX_STEPS),
-    allowedTypes,
-    inputs,
-    outputs,
-    verify,
-    ...(sequence ? {} : { truthTable: rows }),
-  };
+  return { ...base, verify, ...(sequence ? {} : { truthTable: rows }) };
 }
 
 // ---------------------------------------------------------------- URL & clé
@@ -196,9 +201,9 @@ function appBaseUrl(): string {
 }
 
 /** Construit l'URL partageable d'un exercice (optionnellement en mode embed). */
-export function buildExerciseUrl(level: Level, options: { embed?: boolean } = {}): string {
+export function buildExerciseUrl(exercise: Exercise, options: { embed?: boolean } = {}): string {
   const params = new URLSearchParams();
-  params.set(EXERCISE_PARAM, encodeChallenge(level));
+  params.set(EXERCISE_PARAM, encodeExercise(exercise));
   if (options.embed) params.set(EMBED_PARAM, '1');
   return `${appBaseUrl()}?${params.toString()}`;
 }

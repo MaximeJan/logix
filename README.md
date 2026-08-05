@@ -63,17 +63,24 @@ Phases terminées :
 
 ## Créer des exercices par URL
 
-Un exercice sur mesure tient **entièrement dans son lien** : aucun backend, rien à redéployer.
-Pratique pour embarquer Logix dans un site de théorie et proposer des exercices au fil du cours.
+Il n'y a pas de catalogue d'exercices dans l'app : un exercice sur mesure tient **entièrement dans
+son lien**, aucun backend, rien à redéployer. Pratique pour embarquer Logix dans un site de théorie
+et proposer des exercices au fil du cours.
 
-1. Ouvre **Challenges** dans la barre d'outils, puis **« Créer un exercice »** en bas du panneau.
+1. Clique **« Créer un exercice »** dans la barre d'outils.
 2. Remplis le titre, l'objectif, les étapes, les composants proposés à l'élève et les entrées /
    sorties attendues.
-3. Génère la table de vérité (jusqu'à 8 bits d'entrée, toutes les combinaisons d'un clic), ou
-   choisis « Séquence » pour un circuit séquentiel. Le bouton **« Remplir les sorties depuis le
-   circuit courant »** déduit les réponses attendues en simulant le circuit de l'onglet actif :
-   construis la solution, et la table se remplit toute seule.
-4. Copie le lien, ou directement l'extrait `<iframe>` prêt à coller dans ta page.
+3. Choisis la vérification :
+   - **Table de vérité** — génère toutes les combinaisons d'un clic (jusqu'à 8 bits d'entrée).
+   - **Séquence** — une ligne par tick, pour un circuit séquentiel.
+   - **Aucune vérification** — l'élève reçoit l'énoncé et les composants, sans bouton
+     « Vérifier ». Ni ports ni lignes ne sont alors obligatoires : un titre suffit.
+
+   Pour les deux premières, le bouton **« Remplir les sorties depuis le circuit courant »** déduit
+   les réponses attendues en simulant le circuit de l'onglet actif : construis la solution, et la
+   table se remplit toute seule.
+4. Choisis la hauteur de l'iframe (200–2000 px), puis copie l'un des deux champs : le lien de
+   l'exercice, ou l'extrait `<iframe>` prêt à coller dans ta page.
 
 ```html
 <iframe src="https://…/logix/?ex=…&embed=1" width="100%" height="700" style="border:0"></iframe>
@@ -83,8 +90,12 @@ Deux paramètres d'URL :
 
 | Paramètre | Effet |
 | --- | --- |
-| `?ex=<payload>` | Charge l'exercice encodé (base64url) et démarre en mode challenge. |
-| `&embed=1` | UI allégée pour l'iframe : ni onglets, ni import/export, ni encapsulation. |
+| `?ex=<payload>` | Charge l'exercice encodé (base64url) : sa consigne remplace la palette dans le panneau de gauche. |
+| `&embed=1` | UI allégée pour l'iframe : ni onglets, ni import de JSON, ni encapsulation, ni générateur d'exercice, et panneau de consigne compact. Le bouton **Télécharger** reste disponible pour que l'élève rende sa solution. |
+
+La consigne complète (objectif, étapes, entrées/sorties attendues) s'affiche dans le panneau de
+gauche ; le canevas reste entièrement libre. Le bouton **Vérifier** est épinglé en bas du panneau,
+donc atteignable même dans une iframe basse.
 
 L'élève travaille sur une sauvegarde propre à l'exercice : son bac à sable personnel n'est jamais
 écrasé, et un rafraîchissement de la page conserve son circuit en cours. Une URL corrompue est

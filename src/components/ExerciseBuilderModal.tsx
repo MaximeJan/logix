@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import { Link2, Check, Plus, Trash2, Wand2, Copy } from 'lucide-react';
 import { GATES } from '../gates';
 import { PALETTE_ORDER } from '../lib/constants';
-import { buildExerciseUrl, URL_LEVEL_ID } from '../lib/challenge-url';
+import { buildExerciseUrl } from '../lib/exercise-url';
 import { BusWidthControl } from './BusWidthControl';
-import type { ChallengePort, IoRow, Level } from '../challenges';
+import type { Exercise, ExercisePort, IoRow } from '../domain/exercise';
 import type { Circuit } from '../domain/types';
 
 const MONO = { fontFamily: "'IBM Plex Mono', monospace" } as const;
@@ -14,11 +14,19 @@ const MONO = { fontFamily: "'IBM Plex Mono', monospace" } as const;
 // bascule sur une saisie ligne par ligne.
 const MAX_AUTO_BITS = 8;
 
-interface ChallengeBuilderModalProps {
+// Hauteur de l'iframe proposée dans l'extrait à coller (en pixels).
+const IFRAME_H_DEFAULT = 700;
+const IFRAME_H_MIN = 200;
+const IFRAME_H_MAX = 2000;
+
+/** Mode de vérification choisi par l'enseignant. */
+type VerifyKind = 'tt' | 'seq' | 'none';
+
+interface ExerciseBuilderModalProps {
   /** Circuit de l'onglet actif — sert au remplissage automatique des sorties. */
   circuit: Circuit;
   /** Simule le circuit sur les lignes du brouillon et renvoie les sorties obtenues. */
-  computeOutputs: (draft: Level) => { rows: number[][] } | { error: string };
+  computeOutputs: (draft: Exercise) => { rows: number[][] } | { error: string };
   onClose: () => void;
 }
 
@@ -27,9 +35,9 @@ interface Draft {
   objective: string;
   stepsText: string;
   allowedTypes: string[];
-  inputs: ChallengePort[];
-  outputs: ChallengePort[];
-  sequence: boolean;
+  inputs: ExercisePort[];
+  outputs: ExercisePort[];
+  verifyKind: VerifyKind;
   rows: IoRow[];
 }
 
@@ -40,60 +48,78 @@ const EMPTY: Draft = {
   allowedTypes: ['INPUT', 'OUTPUT'],
   inputs: [{ name: 'A', width: 1 }],
   outputs: [{ name: 'S', width: 1 }],
-  sequence: false,
+  verifyKind: 'tt',
   rows: [],
 };
 
-// Modale de création d'exercice : l'enseignant compose un énoncé, une table de
-// vérité (ou une séquence), et récupère le lien partageable — tout l'exercice
-// tient dans l'URL, aucun backend n'est nécessaire.
-export function ChallengeBuilderModal({
+// Modale de création d'exercice : l'enseignant compose un énoncé, éventuellement
+// une table de vérité (ou une séquence), et récupère le lien partageable — tout
+// l'exercice tient dans l'URL, aucun backend n'est nécessaire.
+export function ExerciseBuilderModal({
   circuit,
   computeOutputs,
   onClose,
-}: ChallengeBuilderModalProps) {
+}: ExerciseBuilderModalProps) {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [fillError, setFillError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // Saisie libre pendant la frappe, bornée à la lecture (et normalisée au blur).
+  const [heightText, setHeightText] = useState(String(IFRAME_H_DEFAULT));
+  const iframeHeight = useMemo(() => {
+    const n = Math.floor(Number(heightText));
+    if (!Number.isFinite(n) || n <= 0) return IFRAME_H_DEFAULT;
+    return Math.min(IFRAME_H_MAX, Math.max(IFRAME_H_MIN, n));
+  }, [heightText]);
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
 
+  const noVerify = draft.verifyKind === 'none';
   const totalInBits = draft.inputs.reduce((s, p) => s + p.width, 0);
-  const canAutoGenerate = !draft.sequence && totalInBits > 0 && totalInBits <= MAX_AUTO_BITS;
+  const canAutoGenerate =
+    draft.verifyKind === 'tt' && totalInBits > 0 && totalInBits <= MAX_AUTO_BITS;
 
-  const level = useMemo<Level | null>(() => {
-    if (!draft.title.trim() || draft.rows.length === 0) return null;
-    if (draft.inputs.length === 0 || draft.outputs.length === 0) return null;
+  const exercise = useMemo<Exercise | null>(() => {
+    const title = draft.title.trim();
+    if (!title) return null;
+    // Sans vérification, ni ports ni lignes ne sont obligatoires.
+    if (
+      !noVerify &&
+      (draft.inputs.length === 0 || draft.outputs.length === 0 || draft.rows.length === 0)
+    ) {
+      return null;
+    }
     const steps = draft.stepsText
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean);
     return {
-      id: URL_LEVEL_ID,
-      title: draft.title.trim(),
+      title,
       objective: draft.objective.trim(),
       steps,
       allowedTypes: draft.allowedTypes,
       inputs: draft.inputs,
       outputs: draft.outputs,
-      verify: draft.sequence ? { type: 'sequence', steps: draft.rows } : { type: 'truthtable' },
-      ...(draft.sequence ? {} : { truthTable: draft.rows }),
+      verify: noVerify
+        ? { type: 'none' }
+        : draft.verifyKind === 'seq'
+          ? { type: 'sequence', steps: draft.rows }
+          : { type: 'truthtable' },
+      ...(draft.verifyKind === 'tt' ? { truthTable: draft.rows } : {}),
     };
-  }, [draft]);
+  }, [draft, noVerify]);
 
   const urls = useMemo(() => {
-    if (!level) return null;
-    const plain = buildExerciseUrl(level);
-    const embedded = buildExerciseUrl(level, { embed: true });
+    if (!exercise) return null;
+    const plain = buildExerciseUrl(exercise);
+    const embedded = buildExerciseUrl(exercise, { embed: true });
     return {
       plain,
-      embedded,
-      iframe: `<iframe src="${embedded}" width="100%" height="700" style="border:0"></iframe>`,
+      iframe: `<iframe src="${embedded}" width="100%" height="${iframeHeight}" style="border:0"></iframe>`,
     };
-  }, [level]);
+  }, [exercise, iframeHeight]);
 
   // -------- édition des ports --------
-  const setPort = (kind: 'inputs' | 'outputs', i: number, p: Partial<ChallengePort>) =>
+  const setPort = (kind: 'inputs' | 'outputs', i: number, p: Partial<ExercisePort>) =>
     setDraft((d) => {
       const list = d[kind].slice();
       list[i] = { ...list[i], ...p };
@@ -147,11 +173,11 @@ export function ChallengeBuilderModal({
 
   const fillFromCircuit = () => {
     setFillError(null);
-    if (!level) {
+    if (!exercise) {
       setFillError('Complète le titre, les ports et les lignes avant de remplir.');
       return;
     }
-    const res = computeOutputs(level);
+    const res = computeOutputs(exercise);
     if ('error' in res) {
       setFillError(res.error);
       return;
@@ -264,126 +290,157 @@ export function ChallengeBuilderModal({
             />
           </div>
           <div className="text-[11px] text-stone-500 -mt-3">
-            La vérification apparie les Entrée/Sortie de l'élève{' '}
-            <strong>par ordre de création</strong>, pas par étiquette : précise cet ordre dans les
-            étapes.
+            {noVerify ? (
+              <>
+                Sans vérification, les ports ne servent que d'indication dans la consigne.
+                Retire-les tous si tu n'en veux aucune.
+              </>
+            ) : (
+              <>
+                La vérification apparie les Entrée/Sortie de l'élève{' '}
+                <strong>par ordre de création</strong>, pas par étiquette : précise cet ordre dans
+                les étapes.
+              </>
+            )}
           </div>
 
           {/* ---- Vérification ---- */}
           <Field label="Vérification">
-            <div className="flex items-center gap-4 text-xs text-stone-700 mb-2">
+            <div className="flex flex-wrap items-center gap-4 text-xs text-stone-700 mb-2">
               <label className="flex items-center gap-1.5">
                 <input
                   type="radio"
-                  checked={!draft.sequence}
-                  onChange={() => patch({ sequence: false, rows: [] })}
+                  checked={draft.verifyKind === 'tt'}
+                  onChange={() => patch({ verifyKind: 'tt', rows: [] })}
                 />
                 Table de vérité (circuit combinatoire)
               </label>
               <label className="flex items-center gap-1.5">
                 <input
                   type="radio"
-                  checked={draft.sequence}
-                  onChange={() => patch({ sequence: true, rows: [] })}
+                  checked={draft.verifyKind === 'seq'}
+                  onChange={() => patch({ verifyKind: 'seq', rows: [] })}
                 />
                 Séquence (circuit séquentiel, un tick par ligne)
               </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={noVerify}
+                  onChange={() => patch({ verifyKind: 'none', rows: [] })}
+                />
+                Aucune vérification
+              </label>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              {canAutoGenerate && (
-                <button
-                  onClick={generateRows}
-                  className="px-2.5 py-1 rounded border border-stone-300 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center gap-1.5"
-                >
-                  <Wand2 size={12} />
-                  Générer les {1 << totalInBits} combinaisons
-                </button>
-              )}
-              <button
-                onClick={addRow}
-                className="px-2.5 py-1 rounded border border-stone-300 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center gap-1.5"
-              >
-                <Plus size={12} />
-                Ajouter une ligne
-              </button>
-              <button
-                onClick={fillFromCircuit}
-                disabled={draft.rows.length === 0 || circuit.components.length === 0}
-                className="px-2.5 py-1 rounded border border-stone-300 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-                title="Simule le circuit de l'onglet courant pour pré-remplir les sorties attendues"
-              >
-                <Wand2 size={12} />
-                Remplir les sorties depuis le circuit courant
-              </button>
-            </div>
-
-            {!draft.sequence && !canAutoGenerate && totalInBits > MAX_AUTO_BITS && (
-              <div className="text-[11px] text-amber-700 mb-2">
-                {totalInBits} bits d'entrée : trop de combinaisons pour une table complète. Ajoute
-                les lignes qui t'intéressent à la main.
+            {noVerify ? (
+              <div className="text-[11px] text-stone-500">
+                L'élève reçoit l'énoncé et les composants, sans bouton « Vérifier ». Utile pour une
+                exploration libre ou un exercice corrigé en classe.
               </div>
-            )}
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  {canAutoGenerate && (
+                    <button
+                      onClick={generateRows}
+                      className="px-2.5 py-1 rounded border border-stone-300 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center gap-1.5"
+                    >
+                      <Wand2 size={12} />
+                      Générer les {1 << totalInBits} combinaisons
+                    </button>
+                  )}
+                  <button
+                    onClick={addRow}
+                    className="px-2.5 py-1 rounded border border-stone-300 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center gap-1.5"
+                  >
+                    <Plus size={12} />
+                    Ajouter une ligne
+                  </button>
+                  <button
+                    onClick={fillFromCircuit}
+                    disabled={draft.rows.length === 0 || circuit.components.length === 0}
+                    className="px-2.5 py-1 rounded border border-stone-300 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    title="Simule le circuit de l'onglet courant pour pré-remplir les sorties attendues"
+                  >
+                    <Wand2 size={12} />
+                    Remplir les sorties depuis le circuit courant
+                  </button>
+                </div>
 
-            {draft.rows.length > 0 && (
-              <div className="border border-stone-200 rounded max-h-64 overflow-y-auto">
-                <table className="w-full text-xs border-collapse">
-                  <thead className="bg-stone-100 sticky top-0">
-                    <tr>
-                      <th className="border border-stone-200 px-1 py-1 w-8"></th>
-                      {draft.inputs.map((p, i) => (
-                        <th key={`i${i}`} className="border border-stone-200 px-1 py-1 font-mono">
-                          {p.name || `E${i + 1}`}
-                        </th>
-                      ))}
-                      {draft.outputs.map((p, i) => (
-                        <th
-                          key={`o${i}`}
-                          className="border border-stone-200 px-1 py-1 font-mono bg-blue-50"
-                        >
-                          {p.name || `S${i + 1}`}
-                        </th>
-                      ))}
-                      <th className="border border-stone-200 px-1 py-1 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {draft.rows.map((row, ri) => (
-                      <tr key={ri}>
-                        <td className="border border-stone-200 px-1 py-0.5 text-stone-400 text-center">
-                          {ri + 1}
-                        </td>
-                        {draft.inputs.map((p, ci) => (
-                          <Cell
-                            key={`i${ci}`}
-                            value={row[0][ci] ?? 0}
-                            width={p.width}
-                            onChange={(v) => setCell(ri, 0, ci, v)}
-                          />
+                {draft.verifyKind === 'tt' && !canAutoGenerate && totalInBits > MAX_AUTO_BITS && (
+                  <div className="text-[11px] text-amber-700 mb-2">
+                    {totalInBits} bits d'entrée : trop de combinaisons pour une table complète.
+                    Ajoute les lignes qui t'intéressent à la main.
+                  </div>
+                )}
+
+                {draft.rows.length > 0 && (
+                  <div className="border border-stone-200 rounded max-h-64 overflow-y-auto">
+                    <table className="w-full text-xs border-collapse">
+                      <thead className="bg-stone-100 sticky top-0">
+                        <tr>
+                          <th className="border border-stone-200 px-1 py-1 w-8"></th>
+                          {draft.inputs.map((p, i) => (
+                            <th
+                              key={`i${i}`}
+                              className="border border-stone-200 px-1 py-1 font-mono"
+                            >
+                              {p.name || `E${i + 1}`}
+                            </th>
+                          ))}
+                          {draft.outputs.map((p, i) => (
+                            <th
+                              key={`o${i}`}
+                              className="border border-stone-200 px-1 py-1 font-mono bg-blue-50"
+                            >
+                              {p.name || `S${i + 1}`}
+                            </th>
+                          ))}
+                          <th className="border border-stone-200 px-1 py-1 w-8"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draft.rows.map((row, ri) => (
+                          <tr key={ri}>
+                            <td className="border border-stone-200 px-1 py-0.5 text-stone-400 text-center">
+                              {ri + 1}
+                            </td>
+                            {draft.inputs.map((p, ci) => (
+                              <Cell
+                                key={`i${ci}`}
+                                value={row[0][ci] ?? 0}
+                                width={p.width}
+                                onChange={(v) => setCell(ri, 0, ci, v)}
+                              />
+                            ))}
+                            {draft.outputs.map((p, ci) => (
+                              <Cell
+                                key={`o${ci}`}
+                                value={row[1][ci] ?? 0}
+                                width={p.width}
+                                expected
+                                onChange={(v) => setCell(ri, 1, ci, v)}
+                              />
+                            ))}
+                            <td className="border border-stone-200 text-center">
+                              <button
+                                onClick={() =>
+                                  patch({ rows: draft.rows.filter((_, j) => j !== ri) })
+                                }
+                                className="text-stone-400 hover:text-rose-600"
+                                title="Supprimer la ligne"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </td>
+                          </tr>
                         ))}
-                        {draft.outputs.map((p, ci) => (
-                          <Cell
-                            key={`o${ci}`}
-                            value={row[1][ci] ?? 0}
-                            width={p.width}
-                            expected
-                            onChange={(v) => setCell(ri, 1, ci, v)}
-                          />
-                        ))}
-                        <td className="border border-stone-200 text-center">
-                          <button
-                            onClick={() => patch({ rows: draft.rows.filter((_, j) => j !== ri) })}
-                            className="text-stone-400 hover:text-rose-600"
-                            title="Supprimer la ligne"
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
             {fillError && <div className="mt-2 text-[11px] text-rose-700">{fillError}</div>}
           </Field>
@@ -392,8 +449,9 @@ export function ChallengeBuilderModal({
           <div className="pt-3 border-t border-stone-200 space-y-2">
             {!urls ? (
               <div className="text-xs text-stone-500">
-                Renseigne au minimum un titre, une entrée, une sortie et une ligne de vérification
-                pour obtenir le lien.
+                {noVerify
+                  ? 'Renseigne au minimum un titre pour obtenir le lien.'
+                  : 'Renseigne au minimum un titre, une entrée, une sortie et une ligne de vérification pour obtenir le lien.'}
               </div>
             ) : (
               <>
@@ -403,14 +461,27 @@ export function ChallengeBuilderModal({
                   copied={copied === 'plain'}
                   onCopy={() => copy(urls.plain, 'plain')}
                 />
+                <div className="flex items-center gap-2 pt-1">
+                  <label className="text-[11px] font-medium text-stone-500">
+                    Hauteur de l'iframe
+                  </label>
+                  <input
+                    type="number"
+                    min={IFRAME_H_MIN}
+                    max={IFRAME_H_MAX}
+                    step={10}
+                    value={heightText}
+                    onChange={(e) => setHeightText(e.target.value)}
+                    onBlur={() => setHeightText(String(iframeHeight))}
+                    className="w-20 px-2 py-1 border border-stone-300 rounded text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    style={MONO}
+                  />
+                  <span className="text-[11px] text-stone-400">
+                    px (de {IFRAME_H_MIN} à {IFRAME_H_MAX})
+                  </span>
+                </div>
                 <UrlRow
-                  label="Lien pour iframe (UI allégée)"
-                  value={urls.embedded}
-                  copied={copied === 'embed'}
-                  onCopy={() => copy(urls.embedded, 'embed')}
-                />
-                <UrlRow
-                  label="À coller dans ta page de théorie"
+                  label="<iframe>"
                   value={urls.iframe}
                   copied={copied === 'iframe'}
                   onCopy={() => copy(urls.iframe, 'iframe')}
@@ -507,8 +578,8 @@ function PortList({
   onRemove,
 }: {
   title: string;
-  ports: ChallengePort[];
-  onChange: (i: number, p: Partial<ChallengePort>) => void;
+  ports: ExercisePort[];
+  onChange: (i: number, p: Partial<ExercisePort>) => void;
   onAdd: () => void;
   onRemove: (i: number) => void;
 }) {
@@ -586,7 +657,7 @@ function UrlRow({
 }
 
 // Propose A, B, C… (ou S, T, U… pour les sorties) en évitant les doublons.
-function nextName(existing: ChallengePort[], start = 'A'): string {
+function nextName(existing: ExercisePort[], start = 'A'): string {
   const base = start.charCodeAt(0);
   for (let i = 0; i < 26; i++) {
     const name = String.fromCharCode(base + i);

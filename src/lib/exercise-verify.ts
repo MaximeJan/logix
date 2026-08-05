@@ -1,13 +1,13 @@
-// Vérification des challenges — logique pure, sans React.
+// Vérification d'un exercice — logique pure, sans React.
 // Appariement entrées/sorties PAR ORDRE DE CRÉATION (les labels sont ignorés) :
 // les N premiers INPUT/OUTPUT du circuit de l'élève sont confrontés à la table
-// de vérité (combinatoire) ou à la séquence (séquentiel) du niveau.
+// de vérité (combinatoire) ou à la séquence (séquentiel) de l'exercice.
 import { asInt, portKey, simulate, stepSequential } from './sim';
 import type { Circuit, GetDef } from '../domain/types';
-import type { Level } from '../challenges';
+import type { Exercise } from '../domain/exercise';
 
 /** Une ligne de résultat : valeurs injectées, attendues, obtenues, et verdict. */
-export interface ChallengeRow {
+export interface ExerciseRow {
   inVals: number[];
   expectedOutVals: number[];
   actualOutVals: number[];
@@ -17,7 +17,7 @@ export interface ChallengeRow {
 export interface VerifyResult {
   success: boolean;
   error?: string;
-  table?: ChallengeRow[];
+  table?: ExerciseRow[];
 }
 
 // Lit les valeurs des OUTPUT (port d'entrée 'in0') après simulation.
@@ -34,34 +34,37 @@ export interface VerifyOptions {
   stopOnFirstFailure?: boolean;
 }
 
-export function verifyChallenge(
+export function verifyExercise(
   circuit: Circuit,
-  level: Level,
+  exercise: Exercise,
   getDef: GetDef,
   options: VerifyOptions = {},
 ): VerifyResult {
+  // Exercice libre : rien à vérifier (ni ports imposés, ni lignes).
+  if (exercise.verify.type === 'none') return { success: true, table: [] };
+
   const stopOnFirstFailure = options.stopOnFirstFailure !== false;
   // Récupère les INPUT/OUTPUT du circuit courant par ordre (ignore les labels)
   const inputComps = circuit.components.filter((c) => c.type === 'INPUT');
   const outputComps = circuit.components.filter((c) => c.type === 'OUTPUT');
 
   // Vérifie que le nombre d'entrées/sorties correspond
-  if (inputComps.length < level.inputs.length) {
+  if (inputComps.length < exercise.inputs.length) {
     return {
       success: false,
-      error: `Il faut ${level.inputs.length} entrée(s), trouvées ${inputComps.length}`,
+      error: `Il faut ${exercise.inputs.length} entrée(s), trouvées ${inputComps.length}`,
     };
   }
-  if (outputComps.length < level.outputs.length) {
+  if (outputComps.length < exercise.outputs.length) {
     return {
       success: false,
-      error: `Il faut ${level.outputs.length} sortie(s), trouvées ${outputComps.length}`,
+      error: `Il faut ${exercise.outputs.length} sortie(s), trouvées ${outputComps.length}`,
     };
   }
 
   // Utilise les N premiers INPUT et OUTPUT (ordre de création)
-  const inputIds = inputComps.slice(0, level.inputs.length).map((c) => c.id);
-  const outputIds = outputComps.slice(0, level.outputs.length).map((c) => c.id);
+  const inputIds = inputComps.slice(0, exercise.inputs.length).map((c) => c.id);
+  const outputIds = outputComps.slice(0, exercise.outputs.length).map((c) => c.id);
 
   // Injecte des valeurs sur les INPUT repérés par leur id.
   const withInputs = (c: Circuit, inVals: number[]): Circuit => ({
@@ -76,9 +79,9 @@ export function verifyChallenge(
   const rowMatches = (expected: number[], actual: number[]) =>
     expected.every((exp, i) => (actual[i] ?? 0) === exp);
 
-  if (level.verify.type === 'truthtable') {
-    const allRows: ChallengeRow[] = [];
-    const truthTable = level.truthTable ?? [];
+  if (exercise.verify.type === 'truthtable') {
+    const allRows: ExerciseRow[] = [];
+    const truthTable = exercise.truthTable ?? [];
     for (const [inVals, expectedOutVals] of truthTable) {
       const sim = simulate(withInputs(circuit, inVals), getDef);
       const actualOutVals = readOutputs(sim, outputIds);
@@ -94,31 +97,27 @@ export function verifyChallenge(
       : { success: true, table: allRows };
   }
 
-  if (level.verify.type === 'sequence') {
-    // Reset des DFF avant la séquence (état mémoire à 0)
-    let testCircuit: Circuit = {
-      ...circuit,
-      components: circuit.components.map((c) =>
-        c.type === 'DFF' ? { ...c, state: { ...(c.state ?? {}), q: 0 } } : c,
-      ),
-    };
-    const allSteps: ChallengeRow[] = [];
-    for (const [inVals, expectedOutVals] of level.verify.steps) {
-      testCircuit = withInputs(testCircuit, inVals);
-      testCircuit = stepSequential(testCircuit, getDef);
-      const sim = simulate(testCircuit, getDef);
-      const actualOutVals = readOutputs(sim, outputIds);
-      const match = rowMatches(expectedOutVals, actualOutVals);
-      allSteps.push({ inVals, expectedOutVals, actualOutVals, match });
-      if (!match && stopOnFirstFailure) {
-        return { success: false, error: 'Séquence échouée', table: allSteps };
-      }
+  // Reset des DFF avant la séquence (état mémoire à 0)
+  let testCircuit: Circuit = {
+    ...circuit,
+    components: circuit.components.map((c) =>
+      c.type === 'DFF' ? { ...c, state: { ...(c.state ?? {}), q: 0 } } : c,
+    ),
+  };
+  const allSteps: ExerciseRow[] = [];
+  for (const [inVals, expectedOutVals] of exercise.verify.steps) {
+    testCircuit = withInputs(testCircuit, inVals);
+    testCircuit = stepSequential(testCircuit, getDef);
+    const sim = simulate(testCircuit, getDef);
+    const actualOutVals = readOutputs(sim, outputIds);
+    const match = rowMatches(expectedOutVals, actualOutVals);
+    allSteps.push({ inVals, expectedOutVals, actualOutVals, match });
+    if (!match && stopOnFirstFailure) {
+      return { success: false, error: 'Séquence échouée', table: allSteps };
     }
-    const failed = allSteps.some((r) => !r.match);
-    return failed
-      ? { success: false, error: 'Séquence échouée', table: allSteps }
-      : { success: true, table: allSteps };
   }
-
-  return { success: false, error: 'Type de vérification inconnu' };
+  const failed = allSteps.some((r) => !r.match);
+  return failed
+    ? { success: false, error: 'Séquence échouée', table: allSteps }
+    : { success: true, table: allSteps };
 }

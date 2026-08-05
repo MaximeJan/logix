@@ -10,6 +10,7 @@ export function PaletteItem({
   customDefs,
   onEdit,
   onDelete,
+  compact,
 }: {
   type: string;
   onMouseDown: (e: ReactMouseEvent, type: string) => void;
@@ -17,6 +18,8 @@ export function PaletteItem({
   customDefs: Record<string, unknown> | null | undefined;
   onEdit?: (type: string) => void;
   onDelete?: (type: string) => void;
+  /** Variante deux fois plus petite (panneau d'exercice en iframe). */
+  compact?: boolean;
 }) {
   const def = getDef(type, customDefs ?? null);
   if (!def) return null;
@@ -24,15 +27,17 @@ export function PaletteItem({
   // ViewBox adapté à la taille réelle (utile pour SPLITTER/MERGER et les composants custom).
   const needsDynamic = isCustom || def.w > 60 || def.h > 40;
   const viewBox = needsDynamic ? `-3 -3 ${def.w + 6} ${def.h + 6}` : '-3 -2 70 44';
-  const previewMaxH = 56;
-  const svgH = needsDynamic ? Math.min(previewMaxH, def.h + 6) : 44;
-  const svgW = needsDynamic ? Math.round((def.w + 6) * (svgH / (def.h + 6))) : 66;
+  const previewMaxH = compact ? 28 : 56;
+  const baseH = compact ? 22 : 44;
+  const svgH = needsDynamic ? Math.min(previewMaxH, def.h + 6) : baseH;
+  const svgW = needsDynamic ? Math.round((def.w + 6) * (svgH / (def.h + 6))) : compact ? 33 : 66;
   return (
     <div className="relative group">
       <HoverTooltip text={def.label as string} onlyIfTruncated>
         <button
           onMouseDown={(e) => onMouseDown(e, type)}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition select-none
+          className={`w-full flex items-center rounded-lg border transition select-none
+            ${compact ? 'gap-1.5 px-1.5 py-0.5' : 'gap-3 px-3 py-2'}
             ${
               picked
                 ? 'border-amber-500 bg-amber-50'
@@ -56,7 +61,12 @@ export function PaletteItem({
               {def.shape?.({ state: def.defaultState } as CircuitComponent, 0, 0)}
             </g>
           </svg>
-          <span data-truncate className="text-sm font-medium text-stone-700 truncate min-w-0">
+          <span
+            data-truncate
+            className={`font-medium text-stone-700 truncate min-w-0 ${
+              compact ? 'text-[10px]' : 'text-sm'
+            }`}
+          >
             {def.label as string}
           </span>
         </button>

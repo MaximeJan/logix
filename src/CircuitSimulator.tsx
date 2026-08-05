@@ -6,11 +6,9 @@ import {
   serializeAll as serializeAllCore,
   deserializeAll as deserializeAllCore,
 } from './lib/persist';
-import { getLevel } from './challenges';
-import { verifyChallenge as verifyChallengeCore } from './lib/challenge-verify';
+import { verifyExercise } from './lib/exercise-verify';
 import { buildCustomDefData } from './lib/custom-def';
 import { readUrlContext } from './lib/url-params';
-import { URL_CHAPTER_ID, URL_LEVEL_ID } from './lib/challenge-url';
 import { GRID, INPUT_BUS_CELL_SIZE } from './lib/constants';
 import { GATES } from './gates';
 import {
@@ -27,9 +25,8 @@ import { SaveAsComponentModal } from './components/SaveAsComponentModal';
 import { DeleteDefinitionModal } from './components/DeleteDefinitionModal';
 import { RightPanel } from './components/RightPanel';
 import { PalettePanel } from './components/PalettePanel';
-import { ChallengePanel } from './components/ChallengePanel';
-import { ChallengeBuilderModal } from './components/ChallengeBuilderModal';
-import { ChallengeBanner } from './components/ChallengeBanner';
+import { ExercisePanel } from './components/ExercisePanel';
+import { ExerciseBuilderModal } from './components/ExerciseBuilderModal';
 import { CircuitCanvas } from './components/CircuitCanvas';
 import { PaletteDragGhost } from './components/PaletteDragGhost';
 import { usePrefs } from './hooks/usePrefs';
@@ -48,9 +45,9 @@ import type {
   TabsState,
   Wire,
 } from './domain/types';
-import type { Level } from './challenges';
+import type { Exercise } from './domain/exercise';
 import type { SaveAsCompState } from './components/SaveAsComponentModal';
-import type { ChallengeMode, ChallengeRow } from './components/ChallengePanel';
+import type { ExerciseResult, ExerciseRow } from './components/ExercisePanel';
 import type { ComponentPatch } from './components/PropertiesPanel';
 
 // ============================================================
@@ -120,6 +117,9 @@ export default function CircuitSimulator() {
   // et la clé d'autosave qui en découle. Voir lib/url-params.
   const urlCtx = useMemo(() => readUrlContext(), []);
   const embed = urlCtx.embed;
+  // L'exercice courant, s'il y en a un. Il vient uniquement de l'URL et ne
+  // change jamais pendant la session (pas de catalogue, pas de routeur).
+  const exercise = urlCtx.exercise;
 
   // -------- ÉTAT --------
   // Plusieurs onglets ("zones de travail") : on garde un tableau de tabs et un
@@ -187,7 +187,6 @@ export default function CircuitSimulator() {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   // null = panneau replié. Sinon 'properties' | 'truthtable' | 'chronogram' | 'preferences'.
   const [rightPanelMode, setRightPanelMode] = useState<string | null>(null);
-  const [consigneCollapsed, setConsigneCollapsed] = useState(false); // bandeau de consigne du challenge
 
   // ---- Phase 3 : composants personnalisés ----
   const [saveAsCompState, setSaveAsCompState] = useState<SaveAsCompState | null>(null);
@@ -197,33 +196,11 @@ export default function CircuitSimulator() {
   // Confirmation simple pour la suppression de définition.
   const [deletePromptName, setDeletePromptName] = useState<string | null>(null);
 
-  // ---- Mode Challenge ----
-  // Un exercice passé par l'URL démarre directement en mode challenge (le
-  // canevas est de toute façon vide au montage).
-  const [challengeMode, setChallengeMode] = useState<ChallengeMode | null>(() =>
-    urlCtx.level
-      ? {
-          chapterId: URL_CHAPTER_ID,
-          levelId: URL_LEVEL_ID,
-          level: urlCtx.level,
-          result: null,
-          error: null,
-          table: null,
-        }
-      : null,
-  );
-  // leftPanelMode: 'palette' | 'challenges'
-  const [leftPanelMode, setLeftPanelMode] = useState(urlCtx.level ? 'challenges' : 'palette');
+  // ---- Exercice ----
+  // Verdict de la dernière vérification (null tant que l'élève n'a pas cliqué).
+  const [exerciseResult, setExerciseResult] = useState<ExerciseResult | null>(null);
   // Modale de création d'exercice partageable (générateur d'URL).
   const [builderOpen, setBuilderOpen] = useState(false);
-
-  // Niveau courant : soit l'exercice de l'URL (porté par challengeMode), soit un
-  // niveau du catalogue. Résolu ici pour que les composants d'affichage restent
-  // purement présentationnels.
-  const currentLevel = useMemo(() => {
-    if (!challengeMode) return null;
-    return challengeMode.level ?? getLevel(challengeMode.chapterId, challengeMode.levelId) ?? null;
-  }, [challengeMode]);
 
   // ---- Préférences d'apparence (chargement/sauvegarde gérés par le hook) ----
   const [prefs, setPrefs] = usePrefs();
@@ -351,22 +328,26 @@ export default function CircuitSimulator() {
     });
   };
 
-  // -------- CHALLENGES --------
-  // La logique de vérification (pure) vit dans lib/challenge-verify ; ici on ne
-  // fait que résoudre le niveau courant et déléguer.
-  const verifyChallenge = (): { success: boolean; error?: string; table?: ChallengeRow[] } => {
-    if (!challengeMode) return { success: false, error: 'Pas en challenge' };
-    if (!currentLevel) return { success: false, error: 'Niveau non trouvé' };
-    return verifyChallengeCore(circuit, currentLevel, getDef);
+  // -------- EXERCICE --------
+  // La logique de vérification (pure) vit dans lib/exercise-verify ; ici on ne
+  // fait que déléguer et ranger le verdict.
+  const runVerify = () => {
+    if (!exercise) return;
+    const res = verifyExercise(circuit, exercise, getDef);
+    setExerciseResult({
+      success: res.success,
+      error: res.error ?? null,
+      table: res.table ?? null,
+    });
   };
 
   // Générateur d'exercices : simule le circuit de l'onglet courant sur toutes les
   // lignes du brouillon et renvoie les sorties obtenues, pour pré-remplir la
   // table attendue. `stopOnFirstFailure: false` → on veut TOUTES les lignes.
-  const computeExerciseOutputs = (draft: Level): { rows: number[][] } | { error: string } => {
-    const res = verifyChallengeCore(circuit, draft, getDef, { stopOnFirstFailure: false });
+  const computeExerciseOutputs = (draft: Exercise): { rows: number[][] } | { error: string } => {
+    const res = verifyExercise(circuit, draft, getDef, { stopOnFirstFailure: false });
     if (!res.table) return { error: res.error ?? 'Simulation impossible' };
-    return { rows: res.table.map((r) => r.actualOutVals) };
+    return { rows: res.table.map((r: ExerciseRow) => r.actualOutVals) };
   };
 
   const toggleInput = (id: string) => {
@@ -1226,10 +1207,7 @@ export default function CircuitSimulator() {
         viewBox={viewBox}
         viewBoxBase={viewBoxBaseRef.current}
         onResetView={resetView}
-        challengesOpen={leftPanelMode === 'challenges'}
-        onToggleChallenges={() =>
-          setLeftPanelMode(leftPanelMode === 'challenges' ? 'palette' : 'challenges')
-        }
+        onOpenBuilder={() => setBuilderOpen(true)}
         preferencesOpen={rightPanelMode === 'preferences'}
         onTogglePreferences={() =>
           setRightPanelMode((m) => (m === 'preferences' ? null : 'preferences'))
@@ -1256,40 +1234,14 @@ export default function CircuitSimulator() {
 
       {/* ===== ZONE PRINCIPALE ===== */}
       <div className="flex-1 flex overflow-hidden">
-        {/* PANNEAU GAUCHE : PALETTE OU CHALLENGES */}
-        {leftPanelMode === 'challenges' ? (
-          <ChallengePanel
-            challengeMode={challengeMode}
-            level={currentLevel}
+        {/* PANNEAU GAUCHE : CONSIGNE DE L'EXERCICE (si ?ex=…) OU PALETTE */}
+        {exercise ? (
+          <ExercisePanel
+            exercise={exercise}
+            result={exerciseResult}
             embed={embed}
-            onOpenBuilder={() => setBuilderOpen(true)}
-            onBack={() => setChallengeMode(null)}
-            onStartLevel={(chapterId, levelId) => {
-              setCircuit({
-                components: [],
-                wires: [],
-                customDefinitions: circuit.customDefinitions || {},
-              });
-              setChallengeMode({ chapterId, levelId, result: null, error: null, table: null });
-            }}
-            onVerify={() => {
-              const result = verifyChallenge();
-              setChallengeMode((cm) =>
-                cm
-                  ? {
-                      ...cm,
-                      result: result.success ? 'success' : 'fail',
-                      error: result.error ?? null,
-                      table: result.table ?? null,
-                    }
-                  : cm,
-              );
-            }}
-            onRetry={() =>
-              setChallengeMode((cm) =>
-                cm ? { ...cm, result: null, error: null, table: null } : cm,
-              )
-            }
+            onVerify={runVerify}
+            onRetry={() => setExerciseResult(null)}
             onPaletteMouseDown={handlePaletteMouseDown}
             placeType={placeType}
             customDefs={circuit.customDefinitions}
@@ -1321,14 +1273,8 @@ export default function CircuitSimulator() {
             </div>
           )}
 
-          {/* Bandeau de consigne du challenge (au-dessus du canevas, repliable) */}
-          {!editMode && challengeMode && currentLevel && (
-            <ChallengeBanner
-              level={currentLevel}
-              collapsed={consigneCollapsed}
-              onToggleCollapsed={() => setConsigneCollapsed((c) => !c)}
-            />
-          )}
+          {/* La consigne de l'exercice vit entièrement dans le panneau de gauche :
+              le canevas reste libre de toute superposition. */}
           <CircuitCanvas
             svgRef={svgRef}
             viewBox={viewBox}
@@ -1402,7 +1348,7 @@ export default function CircuitSimulator() {
 
       {/* === MODALE CRÉATION D'EXERCICE PARTAGEABLE === */}
       {builderOpen && (
-        <ChallengeBuilderModal
+        <ExerciseBuilderModal
           circuit={circuit}
           computeOutputs={computeExerciseOutputs}
           onClose={() => setBuilderOpen(false)}
