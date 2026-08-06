@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { PaletteItem } from './PaletteItem';
-import type { Exercise, ExercisePort } from '../domain/exercise';
+import type { Exercise } from '../domain/exercise';
 import type { ExerciseRow } from '../lib/exercise-verify';
 
 export type { ExerciseRow };
@@ -32,7 +32,8 @@ const SCALE = {
   normal: {
     panelPad: 'p-3',
     section: 'space-y-3',
-    title: 'text-sm',
+    title: 'text-base',
+    body: 'text-xs',
     text: 'text-[11px]',
     list: 'space-y-1.5',
     heading: 'text-xs mb-1.5',
@@ -43,7 +44,8 @@ const SCALE = {
   compact: {
     panelPad: 'p-1.5',
     section: 'space-y-1.5',
-    title: 'text-xs',
+    title: 'text-sm',
+    body: 'text-[11px]',
     text: 'text-[10px]',
     list: 'space-y-1',
     heading: 'text-[10px] mb-1',
@@ -53,14 +55,12 @@ const SCALE = {
   },
 } as const;
 
-const fmtPorts = (ports: ExercisePort[]) =>
-  ports.map((p) => `${p.name} (${p.width} bit${p.width > 1 ? 's' : ''})`).join(', ');
-
 // Panneau gauche quand l'app est ouverte sur un exercice (`?ex=…`). Il porte
-// TOUTE la consigne (objectif, étapes, ports attendus) — il n'y a pas de bandeau
-// au-dessus du canevas, qui reste entièrement disponible pour construire le
-// circuit. La consigne défile, le pied « Vérifier » reste épinglé en bas.
-// Un exercice sans vérification n'a pas de pied du tout.
+// TOUTE la consigne (objectif, étapes) — il n'y a pas de bandeau au-dessus du
+// canevas, qui reste entièrement disponible pour construire le circuit. Les
+// entrées/sorties attendues ne sont plus rappelées ici : elles doivent être
+// précisées dans les étapes si besoin. La consigne défile, le pied « Vérifier »
+// reste épinglé en bas. Un exercice sans vérification n'a pas de pied du tout.
 export function ExercisePanel({
   exercise,
   result,
@@ -73,7 +73,6 @@ export function ExercisePanel({
 }: ExercisePanelProps) {
   const S = embed ? SCALE.compact : SCALE.normal;
   const verifiable = exercise.verify.type !== 'none';
-  const hasPorts = exercise.inputs.length > 0 || exercise.outputs.length > 0;
 
   return (
     <div
@@ -84,39 +83,18 @@ export function ExercisePanel({
         <div>
           <h3 className={`font-bold text-stone-800 leading-snug ${S.title}`}>{exercise.title}</h3>
           {exercise.objective && (
-            <p className={`mt-0.5 text-stone-600 leading-snug ${S.text}`}>{exercise.objective}</p>
+            <p className={`mt-0.5 text-stone-600 leading-snug ${S.body}`}>{exercise.objective}</p>
           )}
         </div>
 
         {exercise.steps.length > 0 && (
           <ol
-            className={`list-decimal pl-4 text-stone-700 leading-snug marker:text-sky-600 marker:font-semibold ${S.text} ${S.list}`}
+            className={`list-decimal pl-4 text-stone-700 leading-snug marker:text-sky-600 marker:font-semibold ${S.body} ${S.list}`}
           >
             {exercise.steps.map((s, i) => (
               <li key={i}>{s}</li>
             ))}
           </ol>
-        )}
-
-        {hasPorts && (
-          <div
-            className={`rounded bg-sky-50 border border-sky-100 text-stone-600 leading-snug space-y-0.5 ${S.box} ${S.text}`}
-          >
-            {exercise.inputs.length > 0 && (
-              <div>
-                <span className="font-semibold text-stone-700">
-                  Entrées à créer (dans l'ordre) :{' '}
-                </span>
-                {fmtPorts(exercise.inputs)}
-              </div>
-            )}
-            {exercise.outputs.length > 0 && (
-              <div>
-                <span className="font-semibold text-stone-700">Sorties à créer : </span>
-                {fmtPorts(exercise.outputs)}
-              </div>
-            )}
-          </div>
         )}
 
         {exercise.allowedTypes.length > 0 && (
