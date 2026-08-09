@@ -120,6 +120,9 @@ export default function CircuitSimulator() {
   // L'exercice courant, s'il y en a un. Il vient uniquement de l'URL et ne
   // change jamais pendant la session (pas de catalogue, pas de routeur).
   const exercise = urlCtx.exercise;
+  // Circuit verrouillé : l'élève ne peut pas modifier la structure (démo). Il
+  // peut toujours interagir (basculer entrées, ticker horloges).
+  const locked = !!exercise?.locked;
 
   // -------- ÉTAT --------
   // Plusieurs onglets ("zones de travail") : on garde un tableau de tabs et un
@@ -130,6 +133,17 @@ export default function CircuitSimulator() {
   // Toute la suite du code peut continuer à utiliser `circuit` et `setCircuit`
   // comme avant.
   const [tabsState, setTabsState] = useState<TabsState>(() => {
+    // Un exercice peut fournir un circuit préchargé (démo, point de départ). On
+    // le sème dans l'état INITIAL : l'autosave ne l'écrase qu'aux visites
+    // suivantes (quand une sauvegarde existe), donc le travail de l'élève prime
+    // tout en gardant le circuit fourni à la première ouverture.
+    if (urlCtx.exercise?.preset) {
+      try {
+        return deserializeAll(urlCtx.exercise.preset);
+      } catch {
+        // preset corrompu : on démarre vide
+      }
+    }
     const first = makeEmptyTab();
     return {
       tabs: [first],
@@ -289,6 +303,7 @@ export default function CircuitSimulator() {
 
   // -------- ACTIONS --------
   const placeComponent = (type: string, x: number, y: number) => {
+    if (locked) return;
     const def = getDef(type, circuit.customDefinitions);
     if (!def) return;
     const newComp: CircuitComponent = {
@@ -416,6 +431,7 @@ export default function CircuitSimulator() {
   };
 
   const addWire = (from: WireEnd, to: WireEnd) => {
+    if (locked) return;
     // Refuse self-connection
     if (from.componentId === to.componentId) return;
     // Vérifie la compatibilité des largeurs
@@ -442,6 +458,7 @@ export default function CircuitSimulator() {
   };
 
   const deleteSelection = () => {
+    if (locked) return;
     if (selection.components.length === 0 && selection.wires.length === 0) return;
     const compIds = new Set(selection.components);
     const wireIds = new Set(selection.wires);
@@ -467,6 +484,7 @@ export default function CircuitSimulator() {
   };
 
   const pasteClipboard = () => {
+    if (locked) return;
     if (!clipboard) return;
     const idMap = new Map<string, string>();
     const newComps = clipboard.components.map((c) => {
@@ -533,13 +551,14 @@ export default function CircuitSimulator() {
   // En mode édition, le bouton est toujours actif (il sert à valider l'édition).
   const canEncapsulate = useMemo(() => {
     if (editMode) return true;
+    if (locked) return false;
     if (selection.components.length === 0) return false;
     const sel = circuit.components.filter((c) => selection.components.includes(c.id));
     const hasInput = sel.some((c) => c.type === 'INPUT');
     const hasOutput = sel.some((c) => c.type === 'OUTPUT');
     const hasGate = sel.some((c) => c.type !== 'INPUT' && c.type !== 'OUTPUT');
     return hasInput && hasOutput && hasGate;
-  }, [editMode, selection.components, circuit.components]);
+  }, [editMode, locked, selection.components, circuit.components]);
 
   // Ouvre la modale "Sauver comme composant" en pré-remplissant les ports
   // à partir des INPUT/OUTPUT sélectionnés (ou du circuit complet en mode édition).
@@ -933,6 +952,10 @@ export default function CircuitSimulator() {
     }
     setSelection(newSel);
 
+    // Circuit verrouillé : on garde la sélection (pour voir les Propriétés et
+    // basculer une entrée au clic) mais on ne démarre AUCUN déplacement.
+    if (locked) return;
+
     // Start drag tracking
     const p = getSvgPoint(e);
     const ids = new Set(newSel.components);
@@ -993,7 +1016,7 @@ export default function CircuitSimulator() {
     kind: 'input' | 'output',
   ) => {
     e.stopPropagation();
-    if (placeType) return;
+    if (placeType || locked) return;
     if (kind === 'output') {
       // Start a new wire
       wireMovedRef.current = false;
@@ -1200,9 +1223,9 @@ export default function CircuitSimulator() {
         onCopy={copySelection}
         canCopy={selection.components.length > 0}
         onPaste={pasteClipboard}
-        canPaste={!!clipboard}
+        canPaste={!locked && !!clipboard}
         onDelete={deleteSelection}
-        canDelete={selection.components.length > 0 || selection.wires.length > 0}
+        canDelete={!locked && (selection.components.length > 0 || selection.wires.length > 0)}
         onEncapsulate={openSaveAsComp}
         canEncapsulate={canEncapsulate}
         editMode={!!editMode}
@@ -1244,6 +1267,7 @@ export default function CircuitSimulator() {
             exercise={exercise}
             result={exerciseResult}
             embed={embed}
+            locked={locked}
             onVerify={runVerify}
             onRetry={() => setExerciseResult(null)}
             onPaletteMouseDown={handlePaletteMouseDown}
@@ -1305,7 +1329,7 @@ export default function CircuitSimulator() {
           />
 
           {/* Empty-state hint */}
-          {circuit.components.length === 0 && (
+          {circuit.components.length === 0 && !locked && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-stone-400 text-center max-w-sm">
                 <div className="text-sm font-medium mb-2">Zone de travail vide</div>

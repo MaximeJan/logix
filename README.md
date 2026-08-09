@@ -82,7 +82,12 @@ et proposer des exercices au fil du cours.
 4. Coche (ou non) **« Ouvrir automatiquement le panneau Propriétés »** — décoché par défaut, pour
    que l'élève reste concentré sur le canevas. Active-le si l'exercice demande de renommer des
    ports ou de régler des largeurs de bus depuis ce panneau.
-5. Choisis la hauteur de l'iframe (200–2000 px), puis copie l'un des deux champs : le lien de
+5. **Circuit de départ** (facultatif) : construis d'abord un circuit dans l'onglet, puis, dans la
+   fenêtre de création, coche **« Précharger le circuit courant »** pour le fournir tout monté à
+   l'élève (point de départ à compléter). Coche plutôt **« Verrouiller le circuit »** pour une
+   **démonstration** : l'élève ne peut ni déplacer, ni câbler, ni supprimer, mais peut toujours
+   cliquer les entrées et ticker les horloges pour observer le comportement.
+6. Choisis la hauteur de l'iframe (200–2000 px), puis copie l'un des deux champs : le lien de
    l'exercice, ou l'extrait `<iframe>` prêt à coller dans ta page.
 
 ```html
@@ -101,8 +106,9 @@ gauche ; le canevas reste entièrement libre. Le bouton **Vérifier** est éping
 donc atteignable même dans une iframe basse.
 
 L'élève travaille sur une sauvegarde propre à l'exercice : son bac à sable personnel n'est jamais
-écrasé, et un rafraîchissement de la page conserve son circuit en cours. Une URL corrompue est
-ignorée — l'app démarre alors normalement.
+écrasé, et un rafraîchissement de la page conserve son circuit en cours. Un circuit préchargé sert
+de point de départ à la première ouverture ; ensuite, c'est le travail de l'élève qui est restauré.
+Une URL corrompue est ignorée — l'app démarre alors normalement.
 
 > La vérification apparie les Entrée/Sortie de l'élève **par ordre de création**, pas par étiquette.
 > Précise donc l'ordre attendu dans les étapes de l'énoncé.

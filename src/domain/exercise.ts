@@ -39,4 +39,19 @@ export interface Exercise {
    * de bus depuis ce panneau.
    */
   autoOpenProperties: boolean;
+  /**
+   * Circuit pré-chargé au démarrage de l'exercice, au format sérialisé produit
+   * par `serialize()` (composants, fils, définitions personnalisées). Absent =
+   * canevas vide. Sert à donner un point de départ, ou (avec `locked`) à poser
+   * une démonstration toute montée. Donnée non fiable : l'orchestrateur la fait
+   * passer par `deserializeAll` (qui assainit) avant de l'utiliser.
+   */
+  preset?: unknown;
+  /**
+   * Verrouille la structure du circuit : l'élève ne peut ni placer, ni câbler,
+   * ni déplacer, ni supprimer de composant. Il peut toujours interagir (basculer
+   * les entrées, ticker les horloges). Faux par défaut. Pensé pour les démos
+   * (souvent combiné à `preset`).
+   */
+  locked: boolean;
 }

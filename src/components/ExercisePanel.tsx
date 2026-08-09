@@ -22,6 +22,8 @@ interface ExercisePanelProps {
   customDefs: Record<string, unknown> | null | undefined;
   /** Mode embed (iframe) : tout le contenu du panneau passe à l'échelle compacte. */
   embed?: boolean;
+  /** Circuit verrouillé (démo) : on masque la palette, rien n'est plaçable. */
+  locked?: boolean;
 }
 
 // Deux échelles de rendu pour le panneau. En iframe (embed) la place verticale
@@ -70,9 +72,12 @@ export function ExercisePanel({
   placeType,
   customDefs,
   embed,
+  locked,
 }: ExercisePanelProps) {
   const S = embed ? SCALE.compact : SCALE.normal;
   const verifiable = exercise.verify.type !== 'none';
+  // Verrouillé : la palette ne sert à rien (rien n'est plaçable).
+  const showPalette = !locked && exercise.allowedTypes.length > 0;
 
   return (
     <div
@@ -97,7 +102,7 @@ export function ExercisePanel({
           </ol>
         )}
 
-        {exercise.allowedTypes.length > 0 && (
+        {showPalette && (
           <div>
             <div className={`font-semibold text-stone-500 uppercase tracking-wider ${S.heading}`}>
               Composants
@@ -114,6 +119,15 @@ export function ExercisePanel({
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {locked && (
+          <div
+            className={`rounded bg-stone-100 border border-stone-200 text-stone-500 leading-snug ${S.box} ${S.text}`}
+          >
+            Démonstration : le circuit est fourni et ne peut pas être modifié. Tu peux cliquer les
+            entrées pour l'explorer.
           </div>
         )}
       </div>

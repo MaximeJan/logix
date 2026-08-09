@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { Link2, Check, Plus, Trash2, Wand2, Copy } from 'lucide-react';
 import { GATES } from '../gates';
 import { PALETTE_ORDER } from '../lib/constants';
-import { buildExerciseUrl } from '../lib/exercise-url';
+import { buildExerciseUrl, encodeExercise, MAX_PAYLOAD } from '../lib/exercise-url';
+import { serialize } from '../lib/persist';
 import { BusWidthControl } from './BusWidthControl';
 import type { Exercise, ExercisePort, IoRow } from '../domain/exercise';
 import type { Circuit } from '../domain/types';
@@ -40,6 +41,10 @@ interface Draft {
   verifyKind: VerifyKind;
   rows: IoRow[];
   autoOpenProperties: boolean;
+  /** Inclure le circuit courant comme point de départ (démo, scaffolding). */
+  includePreset: boolean;
+  /** Verrouiller le circuit : l'élève ne peut pas le modifier. */
+  locked: boolean;
 }
 
 const EMPTY: Draft = {
@@ -52,6 +57,8 @@ const EMPTY: Draft = {
   verifyKind: 'tt',
   rows: [],
   autoOpenProperties: false,
+  includePreset: false,
+  locked: false,
 };
 
 // Modale de création d'exercice : l'enseignant compose un énoncé, éventuellement
@@ -79,6 +86,11 @@ export function ExerciseBuilderModal({
   const totalInBits = draft.inputs.reduce((s, p) => s + p.width, 0);
   const canAutoGenerate =
     draft.verifyKind === 'tt' && totalInBits > 0 && totalInBits <= MAX_AUTO_BITS;
+
+  // Circuit courant sérialisé (composants, fils, définitions perso) : capturé une
+  // fois par ouverture de modale (le canevas est figé derrière la modale).
+  const presetData = useMemo(() => serialize(circuit), [circuit]);
+  const presetCount = circuit.components.length;
 
   const exercise = useMemo<Exercise | null>(() => {
     const title = draft.title.trim();
@@ -108,11 +120,18 @@ export function ExerciseBuilderModal({
           : { type: 'truthtable' },
       ...(draft.verifyKind === 'tt' ? { truthTable: draft.rows } : {}),
       autoOpenProperties: draft.autoOpenProperties,
+      locked: draft.locked,
+      // Verrouiller implique de fournir un circuit (sinon rien à montrer).
+      ...(draft.includePreset || draft.locked ? { preset: presetData } : {}),
     };
-  }, [draft, noVerify]);
+  }, [draft, noVerify, presetData]);
 
   const urls = useMemo(() => {
     if (!exercise) return null;
+    // Un circuit préchargé peut faire dépasser le plafond de l'URL : le lien
+    // serait alors ignoré au chargement. On prévient plutôt que de donner un
+    // lien cassé.
+    if (encodeExercise(exercise).length > MAX_PAYLOAD) return { tooLong: true as const };
     const plain = buildExerciseUrl(exercise);
     const embedded = buildExerciseUrl(exercise, { embed: true });
     return {
@@ -284,6 +303,36 @@ export function ExerciseBuilderModal({
             />
             Ouvrir automatiquement le panneau « Propriétés » quand l'élève sélectionne un composant
           </label>
+
+          {/* ---- Circuit préchargé ---- */}
+          <Field label="Circuit de départ">
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1.5 text-xs text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={draft.includePreset || draft.locked}
+                  disabled={draft.locked}
+                  onChange={(e) => patch({ includePreset: e.target.checked })}
+                />
+                Précharger le circuit courant ({presetCount} composant
+                {presetCount > 1 ? 's' : ''}) comme point de départ
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={draft.locked}
+                  onChange={(e) => patch({ locked: e.target.checked })}
+                />
+                Verrouiller le circuit — démonstration non modifiable (implique le préchargement)
+              </label>
+              {presetCount === 0 && (draft.includePreset || draft.locked) && (
+                <div className="text-[11px] text-amber-700">
+                  L'onglet courant est vide : construis d'abord le circuit à fournir, puis rouvre
+                  cette fenêtre.
+                </div>
+              )}
+            </div>
+          </Field>
 
           {/* ---- Ports ---- */}
           <div className="grid grid-cols-2 gap-4">
@@ -465,6 +514,11 @@ export function ExerciseBuilderModal({
                 {noVerify
                   ? 'Renseigne au minimum un titre pour obtenir le lien.'
                   : 'Renseigne au minimum un titre, une entrée, une sortie et une ligne de vérification pour obtenir le lien.'}
+              </div>
+            ) : 'tooLong' in urls ? (
+              <div className="text-xs text-rose-700">
+                Le circuit préchargé rend le lien trop long pour tenir dans une URL. Allège-le
+                (moins de composants / définitions personnalisées) ou renonce au préchargement.
               </div>
             ) : (
               <>

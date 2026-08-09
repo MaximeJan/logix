@@ -139,11 +139,28 @@ L'app reste 100 % statique.
 - `exercise.autoOpenProperties` (clé `p` dans le format fil, absente = `false`) contrôle si
   sélectionner un composant ouvre automatiquement le panneau « Propriétés ». Faux par défaut,
   réglable dans `ExerciseBuilderModal`. Voir l'effet `autoOpenProperties` dans l'orchestrateur.
+- `exercise.preset` (clé `c`) porte un **circuit préchargé** au format `serialize()` (mono-onglet).
+  `exercise.locked` (clé `l`, absente = `false`) **verrouille** la structure. Les deux clés sont
+  **optionnelles** : un ancien lien sans elles décode avec `preset` absent et `locked:false`,
+  comportement identique à avant. `MAX_PAYLOAD` est monté à 64 Ko pour laisser passer un petit
+  circuit ; le builder prévient si le lien dépasse ce plafond.
+
+**Circuit préchargé et démos.** Le preset se sème dans **l'état initial** de `tabsState`
+(`useState(() => deserializeAll(preset))`), pas via un effet : l'autosave (qui n'écrit/écrase que
+si une sauvegarde existe déjà) laisse donc le preset intact à la première ouverture, puis restaure
+le travail de l'élève ensuite. Le preset non fiable passe par `deserializeAll` (assainissement)
+avant usage. Quand `locked`, l'orchestrateur bloque à la source `placeComponent`, `addWire`,
+`deleteSelection`, `pasteClipboard`, le démarrage de fil (`handlePortMouseDown`) et le drag
+(`handleComponentMouseDown` garde la sélection mais ne crée pas de `dragRef`) ; il désactive
+aussi delete/paste/encapsuler dans la barre. **L'interaction reste permise** (basculer les
+entrées, ticker les horloges) — c'est ce qui rend une démo vivante. `ExercisePanel` masque la
+palette et affiche une note « Démonstration ».
 
 **Trois modes de vérification** (`Verify` dans `domain/exercise.ts`) : `truthtable`, `sequence`,
 et `none`. Avec `none`, l'exercice n'a ni ports ni lignes obligatoires — `decodeExercise` n'exige
 qu'un titre, `verifyExercise` renvoie `{ success: true, table: [] }` sans rien simuler, et le
-panneau n'affiche aucun bouton « Vérifier ». C'est le mode « énoncé libre ».
+panneau n'affiche aucun bouton « Vérifier ». C'est le mode « énoncé libre » (idéal avec `locked`
+pour une démo pure).
 
 ### Consigne d'un exercice : panneau gauche uniquement
 

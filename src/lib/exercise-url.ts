@@ -7,7 +7,8 @@
 // Format « fil » (clés d'une lettre pour garder l'URL courte) :
 //   { v:1, t:titre, o:objectif, s:[étapes], a:[typesAutorisés],
 //     i:[[nom,largeur]], u:[[nom,largeur]], k:'tt'|'seq'|'none', r:[[[in],[out]]],
-//     p:1 (optionnel, absent = false) }
+//     p:1 (auto-ouverture Propriétés, optionnel), l:1 (circuit verrouillé,
+//     optionnel), c:{circuit sérialisé} (préchargé, optionnel) }
 // puis JSON → UTF-8 → base64url.
 //
 // Le payload vient de l'URL : c'est une donnée NON FIABLE. `decodeExercise` ne
@@ -26,7 +27,9 @@ export const EMBED_PARAM = 'embed';
 
 // Plafonds d'assainissement — largement au-dessus d'un usage pédagogique normal,
 // mais suffisants pour empêcher une URL forgée de faire ramer l'app.
-const MAX_PAYLOAD = 16384; // caractères de base64url
+// MAX_PAYLOAD est généreux car un circuit préchargé (clé `c`) peut peser
+// quelques Ko ; il borne quand même la taille pour éviter un abus.
+export const MAX_PAYLOAD = 65536; // caractères de base64url
 const MAX_TEXT = 400; // titre / objectif / une étape / un nom de port
 const MAX_STEPS = 30;
 const MAX_PORTS = 16;
@@ -73,6 +76,8 @@ interface WireExercise {
   k: WireKind;
   r: IoRow[];
   p?: 1;
+  l?: 1;
+  c?: unknown;
 }
 
 const wireKind = (v: Verify): WireKind =>
@@ -97,6 +102,8 @@ export function encodeExercise(exercise: Exercise): string {
     k: wireKind(exercise.verify),
     r: rows,
     ...(exercise.autoOpenProperties ? { p: 1 } : {}),
+    ...(exercise.locked ? { l: 1 } : {}),
+    ...(exercise.preset ? { c: exercise.preset } : {}),
   };
   const bytes = new TextEncoder().encode(JSON.stringify(wire));
   return toBase64Url(bytesToBase64(bytes));
@@ -183,6 +190,10 @@ export function decodeExercise(payload: string, opts: DecodeOptions = {}): Exerc
     inputs: parsePorts(data.i),
     outputs: parsePorts(data.u),
     autoOpenProperties: data.p === 1,
+    locked: data.l === 1,
+    // Circuit préchargé : on ne garde que si c'est un objet. Son contenu reste
+    // non fiable ; il sera assaini par `deserializeAll` avant tout usage.
+    ...(isObj(data.c) ? { preset: data.c } : {}),
   };
 
   // Exercice libre : ni ports ni lignes obligatoires, pas de bouton « Vérifier ».

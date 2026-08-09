@@ -32,6 +32,7 @@ const notExercise = {
     [[1], [0]],
   ],
   autoOpenProperties: false,
+  locked: false,
 };
 
 describe('encodeExercise / decodeExercise', () => {
@@ -89,6 +90,57 @@ describe('encodeExercise / decodeExercise', () => {
   });
 });
 
+describe('circuit préchargé et verrouillage', () => {
+  // Circuit préchargé au format sérialisé (mono-onglet), tel que produit par serialize().
+  const preset = {
+    version: 2,
+    name: 'demo',
+    components: [
+      { id: 'i', type: 'INPUT', x: 40, y: 40, state: { value: 1, width: 1 } },
+      { id: 'o', type: 'OUTPUT', x: 200, y: 40 },
+    ],
+    wires: [
+      { id: 'w', from: { componentId: 'i', port: 'out' }, to: { componentId: 'o', port: 'in0' } },
+    ],
+    customDefinitions: {},
+  };
+
+  it('transporte le circuit préchargé fidèlement', () => {
+    const withPreset = { ...notExercise, preset };
+    const decoded = decodeExercise(encodeExercise(withPreset), { isKnownType });
+    expect(decoded.preset).toEqual(preset);
+  });
+
+  it('transporte le verrou (absent = false par défaut)', () => {
+    expect(decodeExercise(encodeExercise(notExercise), { isKnownType }).locked).toBe(false);
+
+    const withLock = { ...notExercise, locked: true, preset };
+    const decoded = decodeExercise(encodeExercise(withLock), { isKnownType });
+    expect(decoded.locked).toBe(true);
+    expect(decoded.preset).toEqual(preset);
+  });
+
+  it('ignore un preset qui n’est pas un objet', () => {
+    const payload = encodeExercise(notExercise);
+    const obj = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    obj.c = 'pas un circuit';
+    const decoded = decodeExercise(btoa(JSON.stringify(obj)), { isKnownType });
+    expect(decoded).not.toBeNull();
+    expect(decoded.preset).toBeUndefined();
+  });
+
+  it('un ancien lien (sans clés c/l) reste valide : ni preset ni verrou', () => {
+    // Simule un lien créé avant la fonctionnalité : aucune clé c ni l.
+    const payload = encodeExercise(notExercise);
+    const obj = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    expect(obj.c).toBeUndefined();
+    expect(obj.l).toBeUndefined();
+    const decoded = decodeExercise(payload, { isKnownType });
+    expect(decoded.locked).toBe(false);
+    expect(decoded.preset).toBeUndefined();
+  });
+});
+
 describe('exercice sans vérification', () => {
   const free = {
     title: 'Explore les portes',
@@ -99,6 +151,7 @@ describe('exercice sans vérification', () => {
     outputs: [],
     verify: { type: 'none' },
     autoOpenProperties: false,
+    locked: false,
   };
 
   it('fait un aller-retour fidèle, même sans port ni ligne', () => {
