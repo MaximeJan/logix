@@ -380,6 +380,50 @@ test('ADDER 8-bit : addition large avec retenue', () => {
 });
 
 // =====================================================================
+// 5b-bis. COMPOSANT FULLADDER (additionneur complet 1-bit, combinatoire)
+// =====================================================================
+suite('composant FULLADDER');
+
+function runFullAdder(A, B, Cin) {
+  const a = makeInput(1, A);
+  const b = makeInput(1, B);
+  const cin = makeInput(1, Cin);
+  const fa = { id: tid('fa'), type: 'FULLADDER', x: 0, y: 0, state: {} };
+  const c = {
+    components: [a, b, cin, fa],
+    wires: [
+      makeWire(a, fa, 'out', 'A'),
+      makeWire(b, fa, 'out', 'B'),
+      makeWire(cin, fa, 'out', 'Cin'),
+    ],
+  };
+  const sim = simulate(c);
+  return { S: getOutputAt(sim, fa, 'S'), Cout: getOutputAt(sim, fa, 'Cout') };
+}
+
+test('FULLADDER : table de vérité complète (8 cas)', () => {
+  for (let A = 0; A < 2; A++)
+    for (let B = 0; B < 2; B++)
+      for (let Cin = 0; Cin < 2; Cin++) {
+        const sum = A + B + Cin;
+        const r = runFullAdder(A, B, Cin);
+        assertEq(r.S, sum & 1, `${A}+${B}+${Cin} → S`);
+        assertEq(r.Cout, sum >> 1, `${A}+${B}+${Cin} → Cout`);
+      }
+});
+
+test('FULLADDER : ports 1-bit sur les 4 orientations', () => {
+  for (const orientation of ['right', 'down', 'left', 'up']) {
+    const def = getDef('FULLADDER', null, { type: 'FULLADDER', state: { orientation } });
+    assertDeepEq(def.inputs.map((p) => p.name), ['A', 'B', 'Cin'], `entrées (${orientation})`);
+    assertDeepEq(def.outputs.map((p) => p.name), ['S', 'Cout'], `sorties (${orientation})`);
+    for (const p of [...def.inputs, ...def.outputs]) {
+      assertEq(p.width ?? 1, 1, `largeur ${p.name} (${orientation})`);
+    }
+  }
+});
+
+// =====================================================================
 // 5c. SPLITTER / MERGER (bus ↔ bits, combinatoire)
 // =====================================================================
 suite('composants SPLITTER / MERGER');

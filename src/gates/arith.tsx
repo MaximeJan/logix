@@ -33,7 +33,74 @@ function adderLayout(comp?: CircuitComponent) {
   });
 }
 
+// Additionneur complet : la brique 1-bit fondamentale (trois 1-bit → deux 1-bit).
+// Boîte à dessin fixe, sans afficheur ; c'est le symbole « + » et les libellés de
+// ports (A, B, Cin, S, Cout) qui la décrivent.
+function fullAdderLayout(comp?: CircuitComponent) {
+  return rectLayout({
+    orientation: comp?.state?.orientation,
+    inputs: [
+      { name: 'A', label: 'A', width: 1 },
+      { name: 'B', label: 'B', width: 1 },
+      { name: 'Cin', label: 'Cin', width: 1 },
+    ],
+    outputs: [
+      { name: 'S', label: 'S', width: 1 },
+      { name: 'Cout', label: 'Cout', width: 1 },
+    ],
+    contentW: 24,
+    contentH: 22,
+    inMargin: 28,
+    outMargin: 34,
+  });
+}
+
 export const arithGates: Record<string, GateDef> = {
+  FULLADDER: {
+    label: 'Additionneur complet',
+    category: 'Arithmétique',
+    w: 114,
+    h: 100,
+    inputs: [],
+    outputs: [],
+    fixedDisplay: true,
+    // Brique 1-bit, purement combinatoire :
+    //   S    = A ⊕ B ⊕ Cin
+    //   Cout = (A·B) + (Cin·(A ⊕ B))   (majorité de A, B, Cin)
+    defaultState: {},
+    fn: (ins) => {
+      const a = asInt(ins[0]) & 1;
+      const b = asInt(ins[1]) & 1;
+      const cin = asInt(ins[2]) & 1;
+      const s = a ^ b ^ cin;
+      const cout = (a & b) | (cin & (a ^ b));
+      return [s, cout];
+    },
+    getDynamicGeometry: (comp) => {
+      const L = fullAdderLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
+    },
+    shape: (comp) => {
+      const L = fullAdderLayout(comp);
+      const { content } = L;
+      return (
+        <RectShape layout={L}>
+          <text
+            x={content.x + content.w / 2}
+            y={content.y + content.h / 2 + 6}
+            textAnchor="middle"
+            fontSize="18"
+            fontWeight="700"
+            fontFamily="'IBM Plex Mono', monospace"
+            fill="#1f2937"
+            style={NO_SEL}
+          >
+            +
+          </text>
+        </RectShape>
+      );
+    },
+  },
   ADDER: {
     label: 'Additionneur',
     category: 'Arithmétique',

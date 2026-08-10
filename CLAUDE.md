@@ -86,7 +86,7 @@ La logique pure (`simulate`, masking, conversions de bits, géométrie, résolut
 
 ## Architecture interne
 
-L'objet **`GATES`** (`src/gates/index.tsx`) agrège TOUS les composants primitifs, répartis par catégorie dans `gates/io|logic|bus|arith|sequential|display.tsx` (portes, INPUT, OUTPUT, SPLITTER, MERGER, MUX, DEMUX, DECODER, DFF, CLOCK, REG, COUNTER, RAM, SRLATCH, SEG7, LEDMATRIX, ADDER…). Chaque entrée a la même forme :
+L'objet **`GATES`** (`src/gates/index.tsx`) agrège TOUS les composants primitifs, répartis par catégorie dans `gates/io|logic|bus|arith|sequential|display.tsx` (portes, INPUT, OUTPUT, SPLITTER, MERGER, MUX, DEMUX, DECODER, DFF, CLOCK, REG, COUNTER, RAM, SRLATCH, SEG7, LEDMATRIX, FULLADDER, ADDER…). Chaque entrée a la même forme :
 
 ```ts
 TYPE: {
