@@ -1,0 +1,14 @@
+{
+  "name": "logix-mcp",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Serveur MCP local + CLI pour générer des liens d'exercices Logix (?ex=) hors-ligne.",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

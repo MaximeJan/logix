@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules'] },
+  // `tools/` : scripts Node autonomes + bundle généré (logix-mcp), hors du
+  // périmètre ESLint « app React » (voir tools/logix-mcp/README.md).
+  { ignores: ['dist', 'coverage', 'node_modules', 'tools'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
