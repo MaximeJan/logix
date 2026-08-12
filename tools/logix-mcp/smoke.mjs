@@ -57,9 +57,40 @@ notify('notifications/initialized', {});
 const tools = await rpc('tools/list', {});
 const names = (tools.result?.tools ?? []).map((t) => t.name).sort();
 ok(
-  JSON.stringify(names) === JSON.stringify(['build_exercise', 'fill_truth_table', 'list_components']),
+  JSON.stringify(names) ===
+    JSON.stringify(['build_circuit', 'build_exercise', 'fill_truth_table', 'list_components']),
   'tools/list → ' + names.join(', '),
 );
+
+const circuit = await rpc('tools/call', {
+  name: 'build_circuit',
+  arguments: {
+    components: [
+      { id: 'A', type: 'INPUT', value: 1 },
+      { id: 'g', type: 'NAND' },
+      { id: 'S', type: 'OUTPUT' },
+    ],
+    wires: [
+      ['A', 'g.in0'],
+      ['A', 'g.in1'],
+      ['g', 'S'],
+    ],
+  },
+});
+const circuitJson = JSON.parse(circuit.result?.content?.[0]?.text ?? '{}');
+ok(
+  circuitJson.preset?.components?.length === 3 && circuitJson.preset?.wires?.length === 3,
+  'build_circuit → preset 3 composants / 3 fils',
+);
+
+const badCircuit = await rpc('tools/call', {
+  name: 'build_circuit',
+  arguments: {
+    components: [{ id: 'A', type: 'INPUT' }, { id: 'g', type: 'NAND' }],
+    wires: [['A', 'g.in7']],
+  },
+});
+ok(badCircuit.result?.isError === true, 'build_circuit → erreur claire sur port inexistant');
 
 const built = await rpc('tools/call', {
   name: 'build_exercise',

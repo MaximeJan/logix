@@ -4,12 +4,13 @@
 //
 //   node cli.mjs exo.json
 //   echo '{"title":"NOT","verify":"none","allowedTypes":["INPUT","OUTPUT","NAND"]}' | node cli.mjs
-//   node cli.mjs --components        # liste les composants disponibles
-//   node cli.mjs --fill circuit.json # remplit une table depuis un circuit-solution
+//   node cli.mjs --components         # liste les composants disponibles
+//   node cli.mjs --circuit circ.json  # valide/construit un circuit -> { preset }
+//   node cli.mjs --fill circuit.json  # remplit une table depuis un circuit-solution
 //
 // Aucune dépendance à installer : s'appuie sur core.mjs (déjà bundlé).
 import { readFile } from 'node:fs/promises';
-import { buildExercise, fillTruthTable, listComponents } from './logix.mjs';
+import { buildExercise, buildCircuit, fillTruthTable, listComponents } from './logix.mjs';
 
 async function readInput(pathArg) {
   if (pathArg) return readFile(pathArg, 'utf8');
@@ -24,6 +25,9 @@ try {
   const [flag, arg] = process.argv.slice(2);
   if (flag === '--components') {
     out(listComponents());
+  } else if (flag === '--circuit') {
+    const spec = JSON.parse(await readInput(arg));
+    out(buildCircuit(spec));
   } else if (flag === '--fill') {
     const spec = JSON.parse(await readInput(arg));
     out(fillTruthTable(spec));

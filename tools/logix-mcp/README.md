@@ -31,6 +31,9 @@ echo '{ "title":"NOT", "verify":"none", "allowedTypes":["INPUT","OUTPUT","NAND"]
 # Liste les composants disponibles (types, ports)
 node cli.mjs --components
 
+# Construit/valide un circuit haut niveau → { preset }
+node cli.mjs --circuit circ.json
+
 # Remplit une table de vérité en simulant un circuit-solution
 node cli.mjs --fill solution.json
 ```
@@ -51,17 +54,60 @@ Dans le **dossier du cours** (`t-doc/janm`), crée `.mcp.json` :
 ```
 
 Relance Claude Code dans ce dossier : il voit alors les outils `build_exercise`,
-`fill_truth_table`, `list_components` et fabrique les liens tout seul.
+`build_circuit`, `fill_truth_table`, `list_components` et fabrique les liens tout seul.
 
 Test de fumée du serveur : `node smoke.mjs`.
 
-## Les trois outils
+## Les quatre outils
 
 | Outil | Rôle |
 | --- | --- |
-| `build_exercise` | Spec d'exercice → `{ url, embedUrl, iframe, tooLong }`. |
+| `build_exercise` | Spec d'exercice → `{ url, embedUrl, iframe, tooLong }`. Accepte un `circuit` (démo/départ). |
+| `build_circuit` | Description haut niveau → `preset` **validé** (types, ports, largeurs, placement auto). |
 | `fill_truth_table` | Circuit-solution → table de vérité aux **bonnes** réponses (= bouton « Remplir depuis le circuit courant »). |
 | `list_components` | Composants dispo (type, libellé, catégorie, ports). |
+
+## Circuits préfaits (démos, points de départ) — la partie délicate
+
+Écrire un circuit sérialisé à la main est casse-gueule. Décris-le **haut niveau** et laisse
+`build_circuit` valider et placer les composants :
+
+```jsonc
+{
+  "name": "not-nand",
+  "components": [
+    { "id": "A", "type": "INPUT", "value": 1 }, // value/width/orientation/label optionnels
+    { "id": "g", "type": "NAND" },
+    { "id": "S", "type": "OUTPUT" }
+  ],
+  // fil = SORTIE → ENTRÉE ; "id" seul si un seul port, sinon "id.port"
+  "wires": [["A", "g.in0"], ["A", "g.in1"], ["g", "S"]]
+}
+```
+
+`build_circuit` vérifie chaque type/port/largeur (message clair sinon), pose les composants en
+colonnes (gauche→droite), et renvoie `{ preset, warnings }`. Ce `preset` se passe tel quel à
+`build_exercise` ; la **même** description peut servir de `circuit` à `fill_truth_table`.
+
+**Une démo verrouillée tient alors en un seul appel `build_exercise`** — pas besoin d'appeler
+`build_circuit` d'abord, passe directement `circuit` :
+
+```jsonc
+{
+  "title": "Démo : NOT avec un NAND",
+  "objective": "Observe : la sortie inverse l'entrée.",
+  "verify": "none",
+  "locked": true,                         // circuit fourni et non modifiable
+  "circuit": {
+    "components": [
+      { "id": "A", "type": "INPUT", "value": 1 },
+      { "id": "g", "type": "NAND" },
+      { "id": "S", "type": "OUTPUT" }
+    ],
+    "wires": [["A", "g.in0"], ["A", "g.in1"], ["g", "S"]]
+  }
+}
+```
 
 ## Format d'un « spec » `build_exercise`
 
@@ -75,9 +121,10 @@ Test de fumée du serveur : `node smoke.mjs`.
   "outputs": [{ "name": "S", "width": 1 }],
   "verify": "truthtable",               // "truthtable" | "sequence" | "none"
   "rows": [[[0],[1]], [[1],[0]]],       // [entrées, sorties] par ligne
-  "locked": false,                       // true = démo non modifiable (avec preset)
+  "locked": false,                       // true = démo non modifiable (avec circuit)
   "autoOpenProperties": false,
-  "preset": { "version": 2, "components": [], "wires": [], "customDefinitions": {} },
+  "circuit": { "components": [], "wires": [] }, // circuit préfait (voir plus haut) — préféré
+  "preset": { "version": 2, "components": [], "wires": [], "customDefinitions": {} }, // bas niveau
   "baseUrl": "https://maximejan.github.io/logix/", // défaut
   "iframeHeight": 700
 }
@@ -85,8 +132,9 @@ Test de fumée du serveur : `node smoke.mjs`.
 
 - `verify:"none"` → énoncé libre, pas de bouton Vérifier ; ni `rows` ni ports obligatoires.
 - `verify:"sequence"` → une ligne = un tick (circuits séquentiels).
-- `preset` sans `locked` = point de départ à compléter ; avec `locked` = démonstration.
-- Si le lien dépasse le plafond (`tooLong:true`), allège le `preset`.
+- `circuit` sans `locked` = point de départ à compléter ; avec `locked` = démonstration.
+- `preset` = alternative bas niveau (déjà sérialisé) ; préfère `circuit`. Si les deux, `preset` gagne.
+- Si le lien dépasse le plafond (`tooLong:true`), allège le circuit.
 
 > **Base URL** : en Node il n'y a pas de navigateur, donc le lien pointe par défaut vers le
 > déploiement GitHub Pages `https://maximejan.github.io/logix/`. Change `baseUrl` si tu sers Logix

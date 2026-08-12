@@ -10,7 +10,13 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { buildExercise, fillTruthTable, listComponents, DEFAULT_BASE_URL } from './logix.mjs';
+import {
+  buildExercise,
+  buildCircuit,
+  fillTruthTable,
+  listComponents,
+  DEFAULT_BASE_URL,
+} from './logix.mjs';
 
 const portArray = {
   type: 'array',
@@ -32,6 +38,43 @@ const rowsSchema = {
   items: { type: 'array', items: { type: 'array', items: { type: 'number' } } },
 };
 
+// Description HAUT NIVEAU d'un circuit (bien plus simple que le format sérialisé) :
+// on liste des composants avec un id libre, et des fils "id ou id.port" → "id ou
+// id.port". Les coordonnées, ids de fils et validations sont gérés par l'outil.
+const circuitSchema = {
+  type: 'object',
+  description:
+    'Circuit décrit simplement. Les composants ont un id libre ; les fils relient une SORTIE à ' +
+    'une ENTRÉE ("A" ou "g.in0"). Coordonnées auto, tout est validé (types, ports, largeurs).',
+  properties: {
+    name: { type: 'string' },
+    components: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'identifiant libre, unique (ex. "A", "g", "S").' },
+          type: { type: 'string', description: 'type de composant (voir list_components).' },
+          value: { type: 'number', description: 'valeur initiale (INPUT).' },
+          width: { type: 'number', description: 'largeur en bits (INPUT/bus/ADDER…), défaut 1.' },
+          orientation: { type: 'string', enum: ['right', 'down', 'left', 'up'] },
+          label: { type: 'string' },
+          state: { type: 'object', description: 'état avancé (ex. MUX selectWidth, RAM…).' },
+          x: { type: 'number' },
+          y: { type: 'number' },
+        },
+        required: ['id', 'type'],
+      },
+    },
+    wires: {
+      type: 'array',
+      description: 'Fils SORTIE→ENTRÉE : ["A","g.in0"] ou {"from":"A","to":"g.in0"}.',
+      items: {},
+    },
+  },
+  required: ['components'],
+};
+
 const TOOLS = [
   {
     name: 'build_exercise',
@@ -39,8 +82,10 @@ const TOOLS = [
       "Fabrique le lien partageable d'un exercice Logix et l'extrait <iframe> à coller dans le " +
       'cours. Tout l\'exercice tient dans l\'URL (?ex=…), aucun backend. verify:"none" = énoncé ' +
       'libre (aucun bouton Vérifier) ; "truthtable" = circuit combinatoire ; "sequence" = ' +
-      'séquentiel (un tick par ligne). locked:true + preset = démonstration non modifiable. ' +
-      'Appuie-toi sur list_components pour les allowedTypes et sur fill_truth_table pour les rows.',
+      'séquentiel (un tick par ligne). Pour une DÉMO ou un circuit de départ, passe « circuit » ' +
+      '(description haut niveau, auto-construite/validée) ; « locked:true » la rend non ' +
+      'modifiable. Appuie-toi sur list_components pour les allowedTypes et sur fill_truth_table ' +
+      'pour les rows.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -68,11 +113,17 @@ const TOOLS = [
           type: 'boolean',
           description: 'Ouvre auto le panneau Propriétés à la sélection (défaut false).',
         },
+        circuit: {
+          ...circuitSchema,
+          description:
+            'Circuit préchargé décrit simplement (voir build_circuit) : point de départ à ' +
+            'compléter, ou démonstration (avec locked:true). Auto-construit et validé.',
+        },
         preset: {
           type: 'object',
           description:
-            'Circuit préchargé au format serialize() : {version:2, components:[...], wires:[...], ' +
-            'customDefinitions:{}}. Sert de point de départ ou de démo (avec locked).',
+            'Alternative bas niveau à « circuit » : circuit déjà sérialisé (serialize()). ' +
+            'Préfère « circuit ». Si les deux sont fournis, « preset » gagne.',
         },
         baseUrl: {
           type: 'string',
@@ -94,9 +145,10 @@ const TOOLS = [
       type: 'object',
       properties: {
         circuit: {
-          type: 'object',
+          ...circuitSchema,
           description:
-            'Circuit-solution : {components:[{id,type,x,y,state?}], wires:[{id,from:{componentId,port},to:{componentId,port}}]}.',
+            'Circuit-solution (même description haut niveau que build_circuit ; le format brut ' +
+            'sérialisé est aussi accepté). Ses INPUT/OUTPUT donnent les colonnes.',
         },
         inputPorts: { ...portArray, description: 'Colonnes d\'entrée (ordre = ordre des INPUT).' },
         outputPorts: { ...portArray, description: 'Colonnes de sortie (ordre = ordre des OUTPUT).' },
@@ -112,6 +164,15 @@ const TOOLS = [
       },
       required: ['circuit', 'inputPorts', 'outputPorts'],
     },
+  },
+  {
+    name: 'build_circuit',
+    description:
+      'Construit ET VALIDE un circuit à partir d\'une description haut niveau, puis renvoie un ' +
+      '« preset » prêt à passer à build_exercise (démo/point de départ) ou à fill_truth_table. ' +
+      'Vérifie types, noms de ports et largeurs, place les composants automatiquement, et ' +
+      'signale toute erreur clairement. Utilise-le dès que tu veux un circuit préfait.',
+    inputSchema: circuitSchema,
   },
   {
     name: 'list_components',
@@ -131,6 +192,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     let result;
     if (name === 'build_exercise') result = buildExercise(args);
+    else if (name === 'build_circuit') result = buildCircuit(args);
     else if (name === 'fill_truth_table') result = fillTruthTable(args);
     else if (name === 'list_components') result = listComponents();
     else throw new Error(`Outil inconnu : ${name}`);
