@@ -10,6 +10,7 @@ import {
   Package,
   X,
   Link2,
+  ExternalLink,
 } from 'lucide-react';
 import logixLogo from '../assets/logix_text.svg';
 import { ToolbarButton, Separator, SettingsIcon } from './ui';
@@ -35,6 +36,8 @@ interface ToolbarProps {
   onCancelEdit: () => void;
   /** Mode embed (iframe) : masque import, encapsulation et générateur d'exercice. */
   embed?: boolean;
+  /** Ouvre le même exercice dans Logix en plein écran (nouvel onglet) — mode embed. */
+  onOpenFull?: () => void;
   viewBox: ViewBox | null;
   viewBoxBase: { w: number; h: number } | null;
   onResetView: () => void;
@@ -69,6 +72,7 @@ export function Toolbar({
   editMode,
   onCancelEdit,
   embed,
+  onOpenFull,
   viewBox,
   viewBoxBase,
   onResetView,
@@ -175,6 +179,18 @@ export function Toolbar({
       )}
 
       <div className="flex-1" />
+
+      {/* En iframe : rouvrir le même exercice dans Logix en plein écran (nouvel
+          onglet). Le travail de l'élève suit (même sauvegarde locale). */}
+      {embed && onOpenFull && (
+        <button
+          onClick={onOpenFull}
+          className="px-2.5 h-8 flex items-center gap-1.5 rounded text-sm font-medium text-blue-700 border border-blue-200 bg-blue-50 hover:bg-blue-100 transition"
+          title="Ouvrir ce même exercice dans Logix en plein écran (nouvel onglet)"
+        >
+          <ExternalLink size={14} /> Ouvrir sur Logix
+        </button>
+      )}
 
       {zoomChanged && viewBox && viewBoxBase && (
         <button

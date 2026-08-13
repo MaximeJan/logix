@@ -9,6 +9,7 @@ import {
 import { verifyExercise } from './lib/exercise-verify';
 import { buildCustomDefData } from './lib/custom-def';
 import { readUrlContext } from './lib/url-params';
+import { EMBED_PARAM } from './lib/exercise-url';
 import { GRID, INPUT_BUS_CELL_SIZE } from './lib/constants';
 import { GATES } from './gates';
 import {
@@ -378,6 +379,18 @@ export default function CircuitSimulator() {
     if (!res.table) return { error: res.error ?? 'Simulation impossible' };
     return { rows: res.table.map((r: ExerciseRow) => r.actualOutVals) };
   };
+
+  // Depuis l'iframe : rouvrir le MÊME exercice dans Logix en plein écran (nouvel
+  // onglet), en retirant simplement `&embed=1` de l'URL courante. Même origine et
+  // même clé d'autosave (dérivée du payload `ex`, pas du flag embed) : le travail
+  // de l'élève est donc préservé au passage.
+  const openInFullLogix = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete(EMBED_PARAM);
+    const opened = window.open(url.toString(), '_blank');
+    if (opened) opened.opener = null;
+  }, []);
 
   const toggleInput = (id: string) => {
     // Bascule 0↔1 sans passer par l'historique (feel naturel).
@@ -1241,6 +1254,7 @@ export default function CircuitSimulator() {
         editMode={!!editMode}
         onCancelEdit={cancelEdit}
         embed={embed}
+        onOpenFull={openInFullLogix}
         viewBox={viewBox}
         viewBoxBase={viewBoxBaseRef.current}
         onResetView={resetView}

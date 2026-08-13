@@ -99,7 +99,7 @@ Deux paramètres d'URL :
 | Paramètre | Effet |
 | --- | --- |
 | `?ex=<payload>` | Charge l'exercice encodé (base64url) : sa consigne remplace la palette dans le panneau de gauche. |
-| `&embed=1` | UI allégée pour l'iframe : ni onglets, ni import de JSON, ni encapsulation, ni générateur d'exercice, et panneau de consigne compact. Le bouton **Télécharger** reste disponible pour que l'élève rende sa solution. |
+| `&embed=1` | UI allégée pour l'iframe : ni onglets, ni import de JSON, ni encapsulation, ni générateur d'exercice, et panneau de consigne compact. Les boutons **Télécharger** (rendre sa solution) et **Ouvrir sur Logix** (rouvrir le même exercice en plein écran, nouvel onglet) restent disponibles. |
 
 La consigne complète (objectif, étapes, entrées/sorties attendues) s'affiche dans le panneau de
 gauche ; le canevas reste entièrement libre. Le bouton **Vérifier** est épinglé en bas du panneau,

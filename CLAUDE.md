@@ -137,7 +137,10 @@ L'app reste 100 % statique.
   `actualOutVals` de toutes les lignes. Il propose aussi la hauteur (px) de l'extrait `<iframe>`,
   et ne produit que **deux** champs à copier : « Lien de l'exercice » et « `<iframe>` ».
 - En mode embed, le bouton **Télécharger** (JSON) reste dans la barre d'outils : l'élève doit
-  pouvoir rendre sa solution. Seul le *chargement* d'un JSON est masqué.
+  pouvoir rendre sa solution. Seul le *chargement* d'un JSON est masqué. La barre y ajoute aussi
+  **« Ouvrir sur Logix »** (`onOpenFull`) : `window.open` de l'URL courante **sans** `&embed=1`
+  (nouvel onglet). Même origine et même clé d'autosave (dérivée du payload `ex`, pas du flag
+  embed), donc le travail de l'élève est préservé au passage.
 - `exercise.autoOpenProperties` (clé `p` dans le format fil, absente = `false`) contrôle si
   sélectionner un composant ouvre automatiquement le panneau « Propriétés ». Faux par défaut,
   réglable dans `ExerciseBuilderModal`. Voir l'effet `autoOpenProperties` dans l'orchestrateur.
