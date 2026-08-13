@@ -1045,6 +1045,44 @@ test('NOT bouclé sur lui-même : hasCycle=true', () => {
   assertTrue(sim.hasCycle, 'cycle détecté');
 });
 
+// Une porte OR dont la sortie reboucle sur UNE de ses deux entrées (l'autre
+// reste pilotable) : mémoire minimale bâtie à la main, sans SRLATCH dédié.
+// Sans mémoire (repartir de 0 à chaque appel), la sortie ne ferait que recopier
+// l'entrée pilotée ; avec `prevOutValues`, une fois mise à 1 elle doit y rester
+// même quand l'entrée retombe à 0 — exactement le comportement attendu d'un
+// « circuit séquentiel » construit à partir d'une porte de base.
+test('OR bouclé sur lui-même : mémoire via prevOutValues (set-and-hold)', () => {
+  const a = makeInput(1, 0);
+  const orGate = makeGate('OR');
+  const c = {
+    components: [a, orGate],
+    wires: [makeWire(a, orGate, 'out', 'in0'), makeWire(orGate, orGate, 'out', 'in1')],
+  };
+  const outKey = `${orGate.id}:out`;
+
+  // 1) A=0, aucun historique : la sortie part à 0 (pas de mémoire fantôme).
+  let sim = simulate(c);
+  assertEq(getOutputAt(sim, orGate, 'out'), 0, 'état initial : 0');
+  assertTrue(sim.hasCycle, 'cycle détecté (auto-bouclage)');
+
+  // 2) A=1, en repartant du dernier outValues : la sortie passe à 1.
+  a.state.value = 1;
+  sim = simulate(c, null, new Set(), sim.outValues);
+  assertEq(getOutputAt(sim, orGate, 'out'), 1, 'A=1 → sortie à 1');
+
+  // 3) A retombe à 0, mais avec la mémoire du dernier appel : la sortie RESTE
+  // à 1 (feedback OR(0, 1)=1) — c'est le point du test.
+  a.state.value = 0;
+  sim = simulate(c, null, new Set(), sim.outValues);
+  assertEq(getOutputAt(sim, orGate, 'out'), 1, 'A=0 mais mémorisé → sortie reste à 1');
+  assertEq(sim.outValues.get(outKey), 1, 'outValues confirme la mémoire');
+
+  // 4) Sans prevOutValues (ex. tout premier appel), pas de mémoire fantôme :
+  // avec A=0 d'entrée, la sortie repart bien à 0.
+  const fresh = simulate(c);
+  assertEq(getOutputAt(fresh, orGate, 'out'), 0, 'appel isolé (sans historique) : 0');
+});
+
 test('Chaîne acyclique : hasCycle=false', () => {
   const i = makeInput(1, 0);
   const n = makeGate('NOT');

@@ -17,8 +17,10 @@ import { getDef } from '../src/gates/registry';
 export { asInt, maskTo, portKey, SEG7_HEX_TABLE, applyOrientation, GATES, getDef };
 
 // --------- Wrappers qui fixent `getDef` pour les tests ---------
-export function simulate(circuit, customDefs = null, recursionStack = new Set()) {
-  return simulateCore(circuit, getDef, customDefs, recursionStack);
+// `prevOutValues` : voir lib/sim.ts (mémoire d'un feedback combinatoire) —
+// même signature que le wrapper réel de gates/registry.tsx.
+export function simulate(circuit, customDefs = null, recursionStack = new Set(), prevOutValues) {
+  return simulateCore(circuit, getDef, customDefs, recursionStack, prevOutValues);
 }
 
 export function stepSequential(circuit) {

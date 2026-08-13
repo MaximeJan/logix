@@ -104,6 +104,8 @@ Quand un composant a une géométrie dépendant de son état (bus, splitter à N
 
 **Le simulateur** (`simulate(circuit, getDef)` dans `lib/sim.ts`, exposé via le wrapper `simulate(circuit)` de `gates/registry.tsx`) est purement combinatoire : tri topologique de Kahn sur le graphe des fils, puis évaluation. Toutes les valeurs sont des **entiers** (les bus sont des `Number` masqués par `maskTo(width, v)`). Les DFF/CLOCK sont traités comme des sources (sortie = `state.q` ou `state.value`), donc le graphe reste acyclique.
 
+**Feedback combinatoire** (un composant câblé sur lui-même, ex. porte OR dont la sortie revient sur une entrée) est autorisé — `addWire` ne refuse plus les self-connections. Un tel fil fait partie d'un cycle : sa source n'est pas résolue dans la passe topologique, donc `simulate()` retombe sur le paramètre optionnel `prevOutValues` (les `outValues` du dernier appel) plutôt que sur 0. C'est ce qui donne une vraie mémoire *set-and-hold* à un feedback construit à la main, sans composant dédié. Dans un graphe acyclique, la source d'un fil est toujours évaluée avant sa cible : ce paramètre n'a donc **aucun effet** sur les circuits existants. Câblé dans l'orchestrateur via `prevOutValuesRef` (lu/écrit en rendu, comme les autres refs — voir `eslint.config.js`).
+
 **La logique séquentielle et temporelle** vit dans `hooks/useCircuitEngine.ts` :
 
 1. `stepSequential(circuit, getDef)` lit les valeurs combinatoires (D, CLK, RST…) et met à jour TOUS les composants à mémoire en un seul `setCircuit` → **atomicité** garantie pour les registres à décalage. Le front montant se détecte en comparant `state.lastClk` à la valeur courante de CLK ; RST=1 force Q=0 (asynchrone, prioritaire).

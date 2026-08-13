@@ -207,10 +207,12 @@ export function getPortWidth(
 }
 
 // Wrapper qui fixe `getDef` : c'est ce `simulate(circuit)` qu'utilise toute l'app.
+// `prevOutValues` : voir lib/sim.ts (mémoire d'un feedback combinatoire).
 export function simulate(
   circuit: Circuit,
   customDefs: Record<string, unknown> | null = null,
   recursionStack: Set<string> = new Set(),
+  prevOutValues?: Map<string, number>,
 ): SimResult {
-  return simulateCore(circuit, getDef, customDefs, recursionStack);
+  return simulateCore(circuit, getDef, customDefs, recursionStack, prevOutValues);
 }

@@ -71,11 +71,20 @@ export function applyOrientation(
 // --------- Simulation combinatoire ---------
 // Tri topologique de Kahn sur le graphe des fils, puis évaluation. Toutes les
 // valeurs sont des entiers (les bus sont des Number masqués à `width` bits).
+//
+// `prevOutValues` (optionnel) porte les `outValues` du dernier appel : c'est ce
+// qui donne une vraie mémoire à un feedback combinatoire (ex. porte OR dont la
+// sortie revient sur une entrée). Dans un graphe acyclique, la source d'un fil
+// est TOUJOURS évaluée avant sa cible (ordre topologique) : ce paramètre n'a
+// donc aucun effet sur les circuits existants — il ne sert que de secours pour
+// une sortie pas encore résolue dans CETTE passe, c'est-à-dire un fil qui fait
+// partie d'un cycle.
 export function simulate(
   circuit: Circuit,
   getDef: GetDef,
   customDefs: Record<string, unknown> | null = null,
   recursionStack: Set<string> = new Set<string>(),
+  prevOutValues?: Map<string, number>,
 ): SimResult {
   const defs = customDefs ?? circuit.customDefinitions ?? {};
   const { components, wires } = circuit;
@@ -129,7 +138,12 @@ export function simulate(
     const inputVals = def.inputs.map((p) => {
       const wire = wireToInput.get(portKey(comp.id, p.name));
       if (!wire) return 0;
-      return asInt(outValues.get(portKey(wire.from.componentId, wire.from.port)) ?? 0);
+      const key = portKey(wire.from.componentId, wire.from.port);
+      const v = outValues.get(key);
+      // Source pas encore résolue dans cette passe (fil de rebouclage) : on
+      // retombe sur sa valeur au dernier appel plutôt que sur 0, sinon un
+      // feedback combinatoire ne pourrait jamais « tenir » son état.
+      return v !== undefined ? asInt(v) : asInt(prevOutValues?.get(key) ?? 0);
     });
 
     let outVals: number[];

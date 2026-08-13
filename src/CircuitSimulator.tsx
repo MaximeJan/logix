@@ -288,7 +288,17 @@ export default function CircuitSimulator() {
   }, [selectionSig, autoOpenProperties]);
 
   // -------- SIMULATION --------
-  const sim = useMemo(() => simulate(circuit), [circuit]);
+  // `prevOutValuesRef` porte les `outValues` du dernier calcul : c'est ce qui
+  // donne une mémoire à un feedback combinatoire (ex. porte OR dont la sortie
+  // revient sur une de ses entrées). Lu ET écrit en rendu, comme les autres
+  // refs de ce fichier (voir « Refs lues en rendu » dans CLAUDE.md) — sans
+  // effet sur les circuits acycliques, qui n'y touchent jamais.
+  const prevOutValuesRef = useRef<Map<string, number>>(new Map());
+  const sim = useMemo(() => {
+    const result = simulate(circuit, undefined, undefined, prevOutValuesRef.current);
+    prevOutValuesRef.current = result.outValues;
+    return result;
+  }, [circuit]);
 
   // -------- MOTEUR (séquentiel + horloge auto + animation) --------
   useCircuitEngine(circuit, sim, setCircuit);
@@ -432,8 +442,8 @@ export default function CircuitSimulator() {
 
   const addWire = (from: WireEnd, to: WireEnd) => {
     if (locked) return;
-    // Refuse self-connection
-    if (from.componentId === to.componentId) return;
+    // Une sortie peut boucler sur une entrée de son PROPRE composant (feedback :
+    // ex. porte OR dont la sortie revient sur une entrée = mémoire minimale).
     // Vérifie la compatibilité des largeurs
     const fromComp = circuit.components.find((c) => c.id === from.componentId);
     const toComp = circuit.components.find((c) => c.id === to.componentId);

@@ -25,8 +25,10 @@ export default tseslint.config(
       // désactive trois règles « React Compiler » plus strictes que les patterns
       // intentionnels de ce projet :
       //  - `refs` : le canevas lit des refs en rendu pour le curseur et l'aperçu
-      //    de câblage (état transitoire non réactif), et l'historique par onglet
-      //    s'appuie sur un ref-getter pointant sur l'onglet actif.
+      //    de câblage (état transitoire non réactif), l'historique par onglet
+      //    s'appuie sur un ref-getter pointant sur l'onglet actif, et la
+      //    simulation lit/écrit `prevOutValuesRef` (mémoire d'un feedback
+      //    combinatoire, ex. porte OR bouclée sur elle-même).
       //  - `immutability` : l'historique undo/redo mute volontairement
       //    `history.current.past/future` (pile par onglet stockée dans un ref).
       //  - `set-state-in-effect` : resync légitime état local ↔ prop (TabButton,
