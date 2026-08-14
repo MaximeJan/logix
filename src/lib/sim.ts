@@ -187,6 +187,14 @@ export function simulate(
         v |= (asInt(inputVals[idx]) & 1) << Number(p.name.slice(1));
       });
       outVals = [maskTo(width, v)];
+    } else if (comp.type === 'SLICE') {
+      // Extrait le champ de bits [hi..lo] du bus d'entrée : out = (in >> lo) sur
+      // (hi-lo+1) bits. Bornes clampées comme dans getDynamicGeometry.
+      const width = Math.max(1, Math.min(32, comp.state?.width ?? 8));
+      const lo = Math.max(0, Math.min(width - 1, comp.state?.lo ?? 0));
+      const hi = Math.max(lo, Math.min(width - 1, comp.state?.hi ?? width - 1));
+      const inVal = maskTo(width, asInt(inputVals[0]));
+      outVals = [maskTo(hi - lo + 1, inVal >> lo)];
     } else if (comp.type === 'BUS') {
       // Bus « un seul émetteur » : N sources (in{k}, en{k}). La sortie porte la
       // valeur de la source active. Si ≥2 sources sont actives → conflit signalé

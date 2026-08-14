@@ -26,6 +26,8 @@ export interface ComponentState {
   dataWidth?: number;
   addrWidth?: number;
   sources?: number; // nœud BUS : nombre d'émetteurs
+  hi?: number; // SLICE : bit de poids fort du champ extrait
+  lo?: number; // SLICE : bit de poids faible du champ extrait
   mem?: number[];
   pixels?: number[];
   cols?: number;

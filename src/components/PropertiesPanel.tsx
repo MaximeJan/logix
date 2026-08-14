@@ -46,6 +46,7 @@ export function PropertiesPanel({ circuit, selection, onUpdate, sim }: Propertie
     const isMuxLike = comp.type === 'MUX' || comp.type === 'DEMUX';
     const isDecoder = comp.type === 'DECODER';
     const isBus = comp.type === 'BUS';
+    const isSlice = comp.type === 'SLICE';
     const isDFF = comp.type === 'DFF';
     const isSRLatch = comp.type === 'SRLATCH';
     const isREG = comp.type === 'REG';
@@ -322,6 +323,75 @@ export function PropertiesPanel({ circuit, selection, onUpdate, sim }: Propertie
             </p>
           </div>
         )}
+
+        {isSlice &&
+          (() => {
+            const sw = Math.max(1, Math.min(32, comp.state?.width ?? 8));
+            const lo = Math.max(0, Math.min(sw - 1, comp.state?.lo ?? 0));
+            const hi = Math.max(lo, Math.min(sw - 1, comp.state?.hi ?? sw - 1));
+            const numField = (label: string, value: number, onCommit: (v: number) => void) => (
+              <div className="flex-1">
+                <label className="text-stone-500 block mb-1">{label}</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={sw - 1}
+                  value={value}
+                  onChange={(e) => onCommit(Math.floor(Number(e.target.value)))}
+                  className="w-full px-2 py-1 border border-stone-300 rounded font-mono text-sm"
+                />
+              </div>
+            );
+            return (
+              <div className="pt-2 border-t border-stone-200 space-y-2">
+                <div>
+                  <label className="text-stone-500 block mb-1">Largeur d'entrée (bits)</label>
+                  <BusWidthControl
+                    value={sw}
+                    min={1}
+                    max={32}
+                    onChange={(w) =>
+                      onUpdate(id, {
+                        state: {
+                          ...(comp.state ?? {}),
+                          width: w,
+                          lo: Math.min(lo, w - 1),
+                          hi: Math.min(hi, w - 1),
+                        },
+                        _dropMismatchedWires: true,
+                      })
+                    }
+                  />
+                </div>
+                <div className="flex gap-2">
+                  {numField('Bit haut', hi, (v) =>
+                    onUpdate(id, {
+                      state: { ...(comp.state ?? {}), hi: Math.max(lo, Math.min(sw - 1, v)) },
+                      _dropMismatchedWires: true,
+                    }),
+                  )}
+                  {numField('Bit bas', lo, (v) =>
+                    onUpdate(id, {
+                      state: { ...(comp.state ?? {}), lo: Math.max(0, Math.min(hi, v)) },
+                      _dropMismatchedWires: true,
+                    }),
+                  )}
+                </div>
+                <p className="text-[11px] text-stone-500 leading-snug">
+                  Extrait les bits{' '}
+                  <code>
+                    [{hi}:{lo}]
+                  </code>{' '}
+                  → sortie de{' '}
+                  <strong>
+                    {hi - lo + 1} bit{hi - lo + 1 > 1 ? 's' : ''}
+                  </strong>
+                  . Ex. décoder une instruction : opcode <code>[7:4]</code>, Rd <code>[3:2]</code>,
+                  Rs <code>[1:0]</code>.
+                </p>
+              </div>
+            );
+          })()}
 
         {isSRLatch && (
           <div className="pt-2 border-t border-stone-200 space-y-2">

@@ -521,6 +521,39 @@ test('BUS : 4 sources, chacune peut piloter à son tour', () => {
 });
 
 // =====================================================================
+// 5e. TRANCHE / SLICE (extraction de champ de bits)
+// =====================================================================
+suite('composant SLICE');
+
+function runSlice(width, hi, lo, inVal) {
+  const inp = makeInput(width, inVal);
+  const sl = { id: tid('sl'), type: 'SLICE', x: 0, y: 0, state: { width, hi, lo } };
+  const c = { components: [inp, sl], wires: [makeWire(inp, sl, 'out', 'in')] };
+  return getOutputAt(simulate(c), sl, 'out');
+}
+
+test('SLICE : extrait le champ [hi:lo]', () => {
+  assertEq(runSlice(8, 3, 0, 0xff), 0xf, '[3:0] de 0xFF');
+  assertEq(runSlice(8, 7, 4, 0xff), 0xf, '[7:4] de 0xFF');
+  assertEq(runSlice(8, 7, 4, 0x30), 0x3, '[7:4] de 0x30');
+  assertEq(runSlice(8, 1, 0, 0b110), 0b10, '[1:0] de 0b110');
+});
+
+test('SLICE : décodage d’une instruction 0xB9 (opcode/Rd/Rs)', () => {
+  // 0xB9 = 1011_10_01 → opcode[7:4]=0xB, Rd[3:2]=2, Rs[1:0]=1
+  assertEq(runSlice(8, 7, 4, 0xb9), 0xb, 'opcode');
+  assertEq(runSlice(8, 3, 2, 0xb9), 2, 'Rd');
+  assertEq(runSlice(8, 1, 0, 0xb9), 1, 'Rs');
+});
+
+test('SLICE : la largeur de sortie vaut hi-lo+1', () => {
+  const sl = { type: 'SLICE', state: { width: 8, hi: 7, lo: 4 } };
+  const def = getDef('SLICE', null, sl);
+  assertEq(def.inputs[0].width, 8, 'entrée = largeur du bus');
+  assertEq(def.outputs[0].width, 4, 'sortie = 4 bits');
+});
+
+// =====================================================================
 // 6. SÉQUENTIEL 1-BIT : DFF + SR LATCH
 // =====================================================================
 suite('séquentiel : DFF (1-bit)');

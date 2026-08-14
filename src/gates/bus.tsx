@@ -5,7 +5,103 @@ import type { GateDef } from './types';
 
 const NO_SEL = { userSelect: 'none' as const, pointerEvents: 'none' as const };
 
+const clampInt = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, Math.floor(v)));
+
+// Bornes normalisées d'une tranche : largeur 1..32, 0 ≤ lo ≤ hi ≤ largeur-1.
+function sliceRange(state?: { width?: number; hi?: number; lo?: number }) {
+  const width = clampInt(state?.width ?? 8, 1, 32);
+  const lo = clampInt(state?.lo ?? 0, 0, width - 1);
+  const hi = clampInt(state?.hi ?? width - 1, lo, width - 1);
+  return { width, lo, hi, n: hi - lo + 1 };
+}
+
 export const busGates: Record<string, GateDef> = {
+  SLICE: {
+    label: 'Tranche',
+    category: 'Bus',
+    w: 78,
+    h: 52,
+    inputs: [],
+    outputs: [],
+    // Extrait le champ de bits [hi..lo] d'un bus `in` de `width` bits.
+    // out = (in >> lo) sur (hi-lo+1) bits. Idéal pour décoder une instruction
+    // (opcode = [7..4], Rd = [3..2], Rs = [1..0]).
+    defaultState: { width: 8, hi: 3, lo: 0 },
+    getDynamicGeometry: (comp) => {
+      const { width, n } = sliceRange(comp?.state);
+      const W = 78;
+      const H = 52;
+      return {
+        w: W,
+        h: H,
+        inputs: [{ name: 'in', x: 0, y: H / 2, width }],
+        outputs: [{ name: 'out', x: W, y: H / 2, width: n }],
+      };
+    },
+    shape: (comp, outputValue, _i, _ibn, angle) => {
+      const { lo, hi, n } = sliceRange(comp?.state);
+      const W = 78;
+      const H = 52;
+      const outVal = maskTo(n, asInt(outputValue));
+      return (
+        <>
+          <line x1="0" y1={H / 2} x2="10" y2={H / 2} strokeWidth="1.2" />
+          <line x1={W - 10} y1={H / 2} x2={W} y2={H / 2} strokeWidth="1.2" />
+          <rect
+            x="10"
+            y="8"
+            width={W - 20}
+            height={H - 16}
+            rx="2"
+            fill="white"
+            stroke="#0f172a"
+            strokeWidth="2"
+          />
+          <g stroke="none">
+            <UprightText
+              angle={angle}
+              x={W / 2}
+              y={H / 2 - 1}
+              textAnchor="middle"
+              fontSize="13"
+              fontWeight="700"
+              fontFamily="'IBM Plex Mono', monospace"
+              fill="#1f2937"
+              style={NO_SEL}
+            >
+              [{hi}:{lo}]
+            </UprightText>
+            <UprightText
+              angle={angle}
+              x={W / 2}
+              y={H / 2 + 12}
+              textAnchor="middle"
+              fontSize="10"
+              fontWeight="700"
+              fontFamily="'IBM Plex Mono', monospace"
+              fill={outVal ? '#1f2937' : '#94a3b8'}
+              style={NO_SEL}
+            >
+              {outVal}
+            </UprightText>
+            <UprightText
+              angle={angle}
+              x={W / 2}
+              y="6"
+              textAnchor="middle"
+              fontSize="8"
+              fontFamily="'IBM Plex Sans', sans-serif"
+              fill="#94a3b8"
+              style={NO_SEL}
+            >
+              tranche
+            </UprightText>
+          </g>
+        </>
+      );
+    },
+  },
   BUS: {
     label: 'Bus',
     category: 'Bus',

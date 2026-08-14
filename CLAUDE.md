@@ -86,7 +86,7 @@ La logique pure (`simulate`, masking, conversions de bits, géométrie, résolut
 
 ## Architecture interne
 
-L'objet **`GATES`** (`src/gates/index.tsx`) agrège TOUS les composants primitifs, répartis par catégorie dans `gates/io|logic|bus|arith|sequential|display.tsx` (portes, INPUT, OUTPUT, SPLITTER, MERGER, BUS, MUX, DEMUX, DECODER, DFF, CLOCK, REG, COUNTER, RAM, SRLATCH, SEG7, LEDMATRIX, FULLADDER, ADDER…). Chaque entrée a la même forme :
+L'objet **`GATES`** (`src/gates/index.tsx`) agrège TOUS les composants primitifs, répartis par catégorie dans `gates/io|logic|bus|arith|sequential|display.tsx` (portes, INPUT, OUTPUT, SPLITTER, MERGER, SLICE, BUS, MUX, DEMUX, DECODER, DFF, CLOCK, REG, COUNTER, RAM, SRLATCH, SEG7, LEDMATRIX, FULLADDER, ADDER…). Chaque entrée a la même forme :
 
 ```ts
 TYPE: {
@@ -107,6 +107,8 @@ Quand un composant a une géométrie dépendant de son état (bus, splitter à N
 **Feedback combinatoire** (un composant câblé sur lui-même, ex. porte OR dont la sortie revient sur une entrée) est autorisé — `addWire` ne refuse plus les self-connections. Un tel fil fait partie d'un cycle : sa source n'est pas résolue dans la passe topologique, donc `simulate()` retombe sur le paramètre optionnel `prevOutValues` (les `outValues` du dernier appel) plutôt que sur 0. C'est ce qui donne une vraie mémoire *set-and-hold* à un feedback construit à la main, sans composant dédié. Dans un graphe acyclique, la source d'un fil est toujours évaluée avant sa cible : ce paramètre n'a donc **aucun effet** sur les circuits existants. Câblé dans l'orchestrateur via `prevOutValuesRef` (lu/écrit en rendu, comme les autres refs — voir `eslint.config.js`).
 
 **Bus « un seul émetteur ».** Le simulateur reste **entièrement entier, sans haute impédance** : il n'y a pas de fil trois-états ni de net multi-drivers (un fil = une source → une entrée). Le composant **`BUS`** (`gates/bus.tsx`) internalise donc la résolution de bus dans un seul nœud : N sources, chacune = une donnée `in{k}` (largeur du bus) + une activation `en{k}` (1 bit), ordonnées `[in0, en0, in1, en1, …]` ; la sortie `bus` porte la source dont `en=1`. Deux activations simultanées = **conflit** : `simulate()` pousse l'id du nœud dans `SimResult.busConflicts`, la `shape` du BUS se dessine en **rouge** (elle recompte les `en` depuis `inputsByName`, sans plomberie), et la barre d'outils affiche « ⚠ Conflit de bus ». C'est la règle enseignée (un seul composant écrit à la fois) rendue visible. Ce nœud remplace le multiplexeur-bus géant qu'il fallait bricoler pour un processeur.
+
+**Tranche de bits (`SLICE`).** Extrait un champ `[hi..lo]` d'un bus (`out = (in >> lo)` sur `hi-lo+1` bits). Indispensable pour décoder une instruction (opcode `[7:4]`, Rd `[3:2]`, Rs `[1:0]`). Bornes clampées (`0 ≤ lo ≤ hi ≤ largeur-1`) dans `getDynamicGeometry`, la `shape` **et** `simulate()` — la largeur de sortie suit `hi-lo+1`. Configurable dans Propriétés.
 
 **La logique séquentielle et temporelle** vit dans `hooks/useCircuitEngine.ts` :
 
