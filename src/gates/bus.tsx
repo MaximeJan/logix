@@ -3,7 +3,170 @@ import { asInt, maskTo } from '../lib/sim';
 import { UprightText } from './UprightText';
 import type { GateDef } from './types';
 
+const NO_SEL = { userSelect: 'none' as const, pointerEvents: 'none' as const };
+
 export const busGates: Record<string, GateDef> = {
+  BUS: {
+    label: 'Bus',
+    category: 'Bus',
+    w: 104,
+    h: 100,
+    inputs: [],
+    outputs: [],
+    // Bus « un seul émetteur à la fois » : N sources, chacune = une donnée
+    // `in{k}` (largeur du bus) + une activation `en{k}` (1 bit). La sortie `bus`
+    // porte la valeur de la source active ; ≥2 activations = conflit (rouge).
+    // width = largeur du bus ; sources = nombre d'émetteurs (2..8).
+    defaultState: { width: 8, sources: 2 },
+    getDynamicGeometry: (comp) => {
+      const width = comp?.state?.width ?? 8;
+      const sources = Math.max(2, Math.min(8, comp?.state?.sources ?? 2));
+      const W = 104;
+      const slotH = 40;
+      const topPad = 30;
+      const h = Math.max(94, sources * slotH + 20);
+      const inputs = [];
+      for (let k = 0; k < sources; k++) {
+        const y = topPad + k * slotH;
+        inputs.push({ name: `in${k}`, x: 0, y, width });
+        inputs.push({ name: `en${k}`, x: 0, y: y + 18, width: 1 });
+      }
+      return { w: W, h, inputs, outputs: [{ name: 'bus', x: W, y: h / 2, width }] };
+    },
+    shape: (comp, outputValue, _i, inputsByName, angle) => {
+      const width = comp?.state?.width ?? 8;
+      const sources = Math.max(2, Math.min(8, comp?.state?.sources ?? 2));
+      const W = 104;
+      const slotH = 40;
+      const topPad = 30;
+      const h = Math.max(94, sources * slotH + 20);
+      const accent = 'var(--lcd-text, #fbbf24)';
+      const red = '#dc2626';
+      const enables: number[] = [];
+      for (let k = 0; k < sources; k++) enables.push(asInt(inputsByName?.[`en${k}`] ?? 0) & 1);
+      const activeCount = enables.reduce((s, e) => s + e, 0);
+      const conflict = activeCount > 1;
+      const frame = conflict ? red : '#0f172a';
+      const outVal = maskTo(width, asInt(outputValue));
+
+      const stubs = [];
+      for (let k = 0; k < sources; k++) {
+        const dataY = topPad + k * slotH;
+        const enY = dataY + 18;
+        const on = enables[k] === 1;
+        stubs.push(
+          <line key={`d${k}`} x1="0" y1={dataY} x2="14" y2={dataY} strokeWidth="1.2" />,
+          <line key={`e${k}`} x1="0" y1={enY} x2="14" y2={enY} strokeWidth="1.2" />,
+          <circle
+            key={`ec${k}`}
+            cx="2.5"
+            cy={enY}
+            r="2.5"
+            fill={on ? (conflict ? red : accent) : 'white'}
+            strokeWidth="1.2"
+          />,
+        );
+      }
+      return (
+        <>
+          {stubs}
+          <line x1={W - 14} y1={h / 2} x2={W} y2={h / 2} strokeWidth="1.2" />
+          <rect
+            x="14"
+            y="8"
+            width={W - 28}
+            height={h - 16}
+            fill="white"
+            stroke={frame}
+            strokeWidth="2"
+          />
+          <g stroke="none">
+            {enables.map((on, k) => {
+              const dataY = topPad + k * slotH;
+              const enY = dataY + 18;
+              return (
+                <g key={`g${k}`}>
+                  {on === 1 && (
+                    <rect
+                      x="16"
+                      y={dataY - 9}
+                      width={W - 32}
+                      height="30"
+                      rx="2"
+                      fill={conflict ? red : accent}
+                      opacity={conflict ? 0.18 : 0.28}
+                    />
+                  )}
+                  <UprightText
+                    angle={angle}
+                    x="22"
+                    y={dataY + 4}
+                    fontSize="12"
+                    fontWeight={on === 1 ? '700' : '600'}
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fill={on === 1 ? '#1f2937' : '#475569'}
+                    style={NO_SEL}
+                  >
+                    s{k}
+                  </UprightText>
+                  <UprightText
+                    angle={angle}
+                    x="22"
+                    y={enY + 4}
+                    fontSize="9"
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fill="#94a3b8"
+                    style={NO_SEL}
+                  >
+                    en
+                  </UprightText>
+                </g>
+              );
+            })}
+            <UprightText
+              angle={angle}
+              x={W / 2}
+              y="21"
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="700"
+              fontFamily="'IBM Plex Sans', sans-serif"
+              fill={conflict ? red : '#475569'}
+              style={NO_SEL}
+            >
+              {conflict ? 'CONFLIT' : 'BUS'}
+            </UprightText>
+            <UprightText
+              angle={angle}
+              x={W - 20}
+              y={h / 2 - 6}
+              textAnchor="end"
+              fontSize="10"
+              fontWeight="700"
+              fontFamily="'IBM Plex Mono', monospace"
+              fill="#475569"
+              style={NO_SEL}
+            >
+              bus
+            </UprightText>
+            <UprightText
+              angle={angle}
+              x={W - 20}
+              y={h / 2 + 13}
+              textAnchor="end"
+              fontSize="12"
+              fontWeight="700"
+              fontFamily="'IBM Plex Mono', monospace"
+              fill={activeCount >= 1 ? '#1f2937' : '#94a3b8'}
+              style={NO_SEL}
+            >
+              {outVal}
+            </UprightText>
+          </g>
+        </>
+      );
+    },
+  },
   MUX: {
     label: 'Multiplexeur',
     category: 'Bus',

@@ -469,6 +469,58 @@ test('SPLITTER → MERGER : aller-retour reconstruit la valeur', () => {
 });
 
 // =====================================================================
+// 5d. NŒUD DE BUS (un seul émetteur à la fois, + détection de conflit)
+// =====================================================================
+suite('composant BUS');
+
+// Bus à N sources : entrées [in0, en0, in1, en1, …], sortie `bus`.
+function makeBus(sources = 2, width = 8) {
+  return { id: tid('bus'), type: 'BUS', x: 0, y: 0, state: { sources, width } };
+}
+
+// Branche des valeurs+activations sur un BUS et renvoie { bus, conflict }.
+function runBus(width, srcSpecs) {
+  // srcSpecs : [{ val, en }, …]
+  const bus = makeBus(srcSpecs.length, width);
+  const comps = [bus];
+  const wires = [];
+  srcSpecs.forEach((s, k) => {
+    const data = makeInput(width, s.val);
+    const en = makeInput(1, s.en);
+    comps.push(data, en);
+    wires.push(makeWire(data, bus, 'out', `in${k}`), makeWire(en, bus, 'out', `en${k}`));
+  });
+  const sim = simulate({ components: comps, wires });
+  return { bus: getOutputAt(sim, bus, 'bus'), conflict: sim.busConflicts.includes(bus.id) };
+}
+
+test('BUS : la source active pilote le bus, aucune activation → 0', () => {
+  assertEq(runBus(8, [{ val: 42, en: 1 }, { val: 99, en: 0 }]).bus, 42, 'source 0 active');
+  assertEq(runBus(8, [{ val: 42, en: 0 }, { val: 99, en: 1 }]).bus, 99, 'source 1 active');
+  const none = runBus(8, [{ val: 42, en: 0 }, { val: 99, en: 0 }]);
+  assertEq(none.bus, 0, 'aucune source active → 0');
+  assertFalse(none.conflict, 'pas de conflit');
+});
+
+test('BUS : deux sources actives → conflit signalé', () => {
+  const r = runBus(8, [{ val: 42, en: 1 }, { val: 99, en: 1 }]);
+  assertTrue(r.conflict, 'conflit détecté (2 en=1)');
+  const single = runBus(8, [{ val: 42, en: 1 }, { val: 99, en: 0 }]);
+  assertFalse(single.conflict, 'une seule source → pas de conflit');
+});
+
+test('BUS : masque à la largeur du bus', () => {
+  assertEq(runBus(4, [{ val: 0xff, en: 1 }, { val: 0, en: 0 }]).bus, 0xf, '0xFF sur bus 4 bits → 0xF');
+});
+
+test('BUS : 4 sources, chacune peut piloter à son tour', () => {
+  for (let active = 0; active < 4; active++) {
+    const specs = [10, 20, 30, 40].map((val, k) => ({ val, en: k === active ? 1 : 0 }));
+    assertEq(runBus(8, specs).bus, (active + 1) * 10, `source ${active} active`);
+  }
+});
+
+// =====================================================================
 // 6. SÉQUENTIEL 1-BIT : DFF + SR LATCH
 // =====================================================================
 suite('séquentiel : DFF (1-bit)');

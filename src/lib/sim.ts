@@ -130,6 +130,7 @@ export function simulate(
 
   // Évaluation en ordre topologique
   const outValues = new Map<string, number>();
+  const busConflicts: string[] = [];
   for (const id of order) {
     const comp = compMap.get(id)!;
     const def = getDef(comp.type, defs, comp);
@@ -186,6 +187,23 @@ export function simulate(
         v |= (asInt(inputVals[idx]) & 1) << Number(p.name.slice(1));
       });
       outVals = [maskTo(width, v)];
+    } else if (comp.type === 'BUS') {
+      // Bus « un seul émetteur » : N sources (in{k}, en{k}). La sortie porte la
+      // valeur de la source active. Si ≥2 sources sont actives → conflit signalé
+      // (règle enseignée : un seul composant écrit sur le bus à la fois).
+      // Ports rangés [in0, en0, in1, en1, …] : donnée en 2k, activation en 2k+1.
+      const width = comp.state?.width ?? 8;
+      const sources = comp.state?.sources ?? 2;
+      let active = 0;
+      let value = 0;
+      for (let k = 0; k < sources; k++) {
+        if (asInt(inputVals[2 * k + 1]) & 1) {
+          active += 1;
+          value |= maskTo(width, asInt(inputVals[2 * k]));
+        }
+      }
+      outVals = [active >= 1 ? maskTo(width, value) : 0];
+      if (active > 1) busConflicts.push(comp.id);
     } else if (comp.type === 'ADDER') {
       // Additionneur combinatoire N-bit : S = (A + B + Cin) mod 2^width, Cout = retenue.
       const width = comp.state?.width ?? 4;
@@ -284,7 +302,7 @@ export function simulate(
     }
   }
 
-  return { outValues, wireValues, inputValues, hasCycle };
+  return { outValues, wireValues, inputValues, hasCycle, busConflicts };
 }
 
 // --------- Étape séquentielle ---------

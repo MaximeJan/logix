@@ -70,6 +70,7 @@ export const PALETTE_ORDER: string[] = [
   'DECODER',
   'SPLITTER',
   'MERGER',
+  'BUS',
   'FULLADDER',
   'ADDER',
   'SRLATCH',

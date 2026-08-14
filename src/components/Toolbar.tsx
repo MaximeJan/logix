@@ -47,6 +47,8 @@ interface ToolbarProps {
   hasManualClock: boolean;
   onTick: () => void;
   hasCycle: boolean;
+  /** ≥1 nœud BUS avec deux sources actives simultanément. */
+  busConflict: boolean;
   wireWidthMismatch: { wFrom: number; wTo: number } | null;
 }
 
@@ -82,6 +84,7 @@ export function Toolbar({
   hasManualClock,
   onTick,
   hasCycle,
+  busConflict,
   wireWidthMismatch,
 }: ToolbarProps) {
   const zoomChanged =
@@ -239,6 +242,11 @@ export function Toolbar({
       {hasCycle && (
         <div className="text-xs text-rose-600 px-2 py-1 bg-rose-50 rounded border border-rose-200">
           ⚠ Cycle détecté
+        </div>
+      )}
+      {busConflict && (
+        <div className="text-xs text-rose-700 px-2 py-1 bg-rose-50 rounded border border-rose-300">
+          ⚠ Conflit de bus : deux sources actives
         </div>
       )}
       {wireWidthMismatch && (

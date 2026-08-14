@@ -45,6 +45,7 @@ export function PropertiesPanel({ circuit, selection, onUpdate, sim }: Propertie
       comp.type === 'MERGER';
     const isMuxLike = comp.type === 'MUX' || comp.type === 'DEMUX';
     const isDecoder = comp.type === 'DECODER';
+    const isBus = comp.type === 'BUS';
     const isDFF = comp.type === 'DFF';
     const isSRLatch = comp.type === 'SRLATCH';
     const isREG = comp.type === 'REG';
@@ -275,6 +276,49 @@ export function PropertiesPanel({ circuit, selection, onUpdate, sim }: Propertie
             </select>
             <p className="text-[11px] text-stone-500 mt-1 leading-snug">
               Seule la sortie correspondant à la valeur d'entrée vaut 1, les autres 0.
+            </p>
+          </div>
+        )}
+
+        {isBus && (
+          <div className="pt-2 border-t border-stone-200 space-y-2">
+            <div>
+              <label className="text-stone-500 block mb-1">Largeur du bus (bits)</label>
+              <BusWidthControl
+                value={comp.state?.width ?? 8}
+                min={1}
+                max={32}
+                onChange={(w) => {
+                  onUpdate(id, {
+                    state: { ...(comp.state ?? {}), width: w },
+                    _dropMismatchedWires: true,
+                  });
+                }}
+              />
+            </div>
+            <div>
+              <label className="text-stone-500 block mb-1">Nombre de sources</label>
+              <select
+                value={comp.state?.sources ?? 2}
+                onChange={(e) => {
+                  onUpdate(id, {
+                    state: { ...(comp.state ?? {}), sources: Number(e.target.value) },
+                    _dropMismatchedWires: true,
+                  });
+                }}
+                className="w-full px-2 py-1 border border-stone-300 rounded font-mono text-sm bg-white"
+              >
+                {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                  <option key={n} value={n}>
+                    {n} sources
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[11px] text-stone-500 leading-snug">
+              Chaque source a une donnée <code>in</code> et une activation <code>en</code>. La
+              sortie porte la source dont <code>en</code> = 1. <strong>Une seule</strong> à la fois
+              : deux <code>en</code> = 1 → conflit (rouge).
             </p>
           </div>
         )}

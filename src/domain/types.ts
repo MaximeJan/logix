@@ -25,6 +25,7 @@ export interface ComponentState {
   selectWidth?: number;
   dataWidth?: number;
   addrWidth?: number;
+  sources?: number; // nœud BUS : nombre d'émetteurs
   mem?: number[];
   pixels?: number[];
   cols?: number;
@@ -142,4 +143,6 @@ export interface SimResult {
   wireValues: Map<string, number>;
   inputValues: Map<string, number>;
   hasCycle: boolean;
+  /** Ids des nœuds BUS où ≥2 sources sont actives en même temps (conflit). */
+  busConflicts: string[];
 }
