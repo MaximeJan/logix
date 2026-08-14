@@ -270,10 +270,11 @@ export default function CircuitSimulator() {
   // Sélectionner un composant ouvre « Propriétés » ; cliquer à côté (désélection)
   // referme le panneau. Les vues Table/Chrono/Apparence, ouvertes à la demande
   // depuis la barre du haut, ne sont pas refermées par la désélection.
-  // Un exercice peut désactiver cette ouverture automatique (par défaut il la
-  // désactive) : l'enseignant choisit si l'élève voit ce panneau sans y être
-  // invité par la barre d'outils.
-  const autoOpenProperties = !exercise || exercise.autoOpenProperties;
+  // Le réglage `exercise.autoOpenProperties` ne concerne QUE l'iframe (embed),
+  // pour garder la vignette épurée. En plein écran (hors embed, ex. via « Ouvrir
+  // sur Logix »), on retrouve le comportement normal de Logix : Propriétés
+  // s'ouvre à la sélection, quel que soit le réglage de l'exercice.
+  const autoOpenProperties = !embed || !exercise || exercise.autoOpenProperties;
   const selectionSig =
     selection.components.length === 0
       ? null
