@@ -54,7 +54,7 @@ Phases terminées :
 - Table de vérité automatique
 - Apparence personnalisable (couleurs, épaisseurs, grille)
 
-- SR latch, registre N-bit avec chargement conditionnel, compteur N-bit
+- SR latch, registre N-bit avec chargement conditionnel, compteur N-bit à chargement (LD charge une valeur arbitraire — compteur de programme)
 - RAM configurable (1–8 bits d'adresse, 1–16 bits par mot), édition cellule par cellule
 - Chronogramme en temps réel
 - Afficheur 7 segments, matrice LED

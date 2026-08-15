@@ -225,9 +225,13 @@ export function simulate(
       const width = comp.state?.width ?? 4;
       outVals = [maskTo(width, asInt(comp.state?.q))];
     } else if (comp.type === 'COUNTER') {
+      // Ports [EN, LD, D, CLK] : LD=1 charge la valeur arbitraire D (asynchrone,
+      // prioritaire — remplace l'ancien reset à 0). Idéal pour un compteur de
+      // programme : PC ← adresse de saut.
       const width = comp.state?.width ?? 4;
-      const rstVal = asInt(inputVals[2]) & 1;
-      outVals = [rstVal ? 0 : maskTo(width, asInt(comp.state?.q))];
+      const ldVal = asInt(inputVals[1]) & 1;
+      const setVal = maskTo(width, asInt(inputVals[2]));
+      outVals = [ldVal ? setVal : maskTo(width, asInt(comp.state?.q))];
     } else if (comp.type === 'RAM') {
       const aw = comp.state?.addrWidth ?? 3;
       const dw = comp.state?.dataWidth ?? 4;
@@ -349,7 +353,7 @@ export function stepSequential(circuit: Circuit, getDef: GetDef): Circuit {
     }
     if (comp.type === 'COUNTER') {
       const clkVal = asInt(sim.inputValues.get(portKey(comp.id, 'CLK'))) & 1;
-      const rstVal = asInt(sim.inputValues.get(portKey(comp.id, 'RST'))) & 1;
+      const ldVal = asInt(sim.inputValues.get(portKey(comp.id, 'LD'))) & 1;
       const enVal = asInt(sim.inputValues.get(portKey(comp.id, 'EN'))) & 1;
       const lastClk = comp.state?.lastClk ?? 0;
       const width = comp.state?.width ?? 4;
@@ -358,7 +362,8 @@ export function stepSequential(circuit: Circuit, getDef: GetDef): Circuit {
       if (lastClk === 0 && clkVal === 1 && enVal) {
         newQ = maskTo(width, storedQ + 1);
       }
-      if (rstVal) newQ = 0;
+      // Chargement arbitraire (asynchrone, prioritaire) : LD=1 → Q ← D.
+      if (ldVal) newQ = maskTo(width, asInt(sim.inputValues.get(portKey(comp.id, 'D'))));
       if (newQ !== storedQ || clkVal !== lastClk) {
         return { ...comp, state: { ...(comp.state ?? {}), q: newQ, lastClk: clkVal } };
       }

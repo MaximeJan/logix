@@ -473,8 +473,10 @@ export function PropertiesPanel({ circuit, selection, onUpdate, sim }: Propertie
             <div className="text-[11px] text-stone-500 leading-snug">
               Compteur {currentWidth}-bit. Sur <strong>front montant</strong> de CLK, Q est
               incrémenté de 1 si <strong>EN = 1</strong>, sinon conservé. Le compteur boucle
-              naturellement de {currentWidth >= 32 ? '2³²-1' : (1 << currentWidth) - 1} à 0. RST = 1
-              force Q à 0 (asynchrone).
+              naturellement de {currentWidth >= 32 ? '2³²-1' : (1 << currentWidth) - 1} à 0.{' '}
+              <strong>LD = 1</strong> charge la valeur arbitraire présente sur <strong>D</strong> (Q
+              ← D, asynchrone et prioritaire) — pratique comme compteur de programme (saut : PC ←
+              adresse).
             </div>
             <div className="flex items-center justify-between">
               <span className="text-stone-500 text-xs">État Q actuel</span>

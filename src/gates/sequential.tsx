@@ -68,8 +68,9 @@ function counterLayout(comp?: CircuitComponent) {
     orientation: comp?.state?.orientation,
     inputs: [
       { name: 'EN', label: 'EN', width: 1 },
+      { name: 'LD', label: 'LD', width: 1 },
+      { name: 'D', label: 'D', width },
       { name: 'CLK', label: 'CLK', width: 1, clk: true },
-      { name: 'RST', label: 'R', width: 1 },
     ],
     outputs: [{ name: 'Q', label: 'Q', width }],
     contentW,

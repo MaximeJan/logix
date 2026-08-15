@@ -836,24 +836,39 @@ test('COUNTER : hold si EN=0', () => {
   assertEq(cur.state.q, 7, 'hold');
 });
 
-test('COUNTER : RST async force Q=0 immédiatement', () => {
-  const en = makeInput(1, 1);
+test('COUNTER : LD charge une valeur arbitraire (asynchrone, prioritaire)', () => {
+  const en = makeInput(1, 1); // EN=1 : le chargement doit primer sur l'incrément
   const clk = makeInput(1, 0);
-  const rst = makeInput(1, 1);
-  const cnt = makeCounter({ q: 12, lastClk: 0, width: 4 });
+  const ld = makeInput(1, 1);
+  const d = makeInput(4, 10);
+  const cnt = makeCounter({ q: 3, lastClk: 0, width: 4 });
   let c = {
-    components: [en, clk, rst, cnt],
+    components: [en, clk, ld, d, cnt],
     wires: [
       makeWire(en, cnt, 'out', 'EN'),
       makeWire(clk, cnt, 'out', 'CLK'),
-      makeWire(rst, cnt, 'out', 'RST'),
+      makeWire(ld, cnt, 'out', 'LD'),
+      makeWire(d, cnt, 'out', 'D'),
     ],
   };
-  // simulate() doit déjà sortir Q=0
-  assertEq(getOutputAt(simulate(c), cnt, 'Q'), 0, 'simulate() reset');
+  // simulate() doit déjà sortir la valeur chargée
+  assertEq(getOutputAt(simulate(c), cnt, 'Q'), 10, 'simulate() charge D=10');
   c = stepSequential(c);
-  const cur = c.components.find((x) => x.type === 'COUNTER');
-  assertEq(cur.state.q, 0, 'state persiste 0');
+  assertEq(
+    c.components.find((x) => x.type === 'COUNTER').state.q,
+    10,
+    'chargé à 10 (prioritaire sur EN)',
+  );
+
+  // LD repasse à 0 : le comptage reprend depuis la valeur chargée
+  c.components.find((x) => x.id === ld.id).state.value = 0;
+  c.components.find((x) => x.id === clk.id).state.value = 1;
+  c = stepSequential(c);
+  assertEq(
+    c.components.find((x) => x.type === 'COUNTER').state.q,
+    11,
+    'compte 10 → 11 après relâche de LD',
+  );
 });
 
 test('COUNTER 4-bit : wrap automatique 15 → 0', () => {
