@@ -192,6 +192,37 @@ export function getPortPosition(
   return { x: comp.x + (port.x ?? 0), y: comp.y + (port.y ?? 0) };
 }
 
+// Direction (normale sortante) dans laquelle un port fait face, déduite du bord
+// du composant sur lequel il est posé — dans le repère DÉJÀ orienté (getDef
+// applique l'orientation). Un composant orienté « down » a ainsi sa sortie sur
+// le bord bas → [0,1]. Sert au routage des fils (routeWireDirected). Repli sur
+// la convention gauche→droite si le port est introuvable.
+export function getPortFacing(
+  comp: CircuitComponent,
+  portName: string,
+  kind: 'input' | 'output',
+  customDefs: Record<string, unknown> | null | undefined,
+): [number, number] {
+  const fallback: [number, number] = kind === 'output' ? [1, 0] : [-1, 0];
+  const def = getDef(comp.type, customDefs, comp);
+  if (!def) return fallback;
+  const ports = kind === 'input' ? def.inputs : def.outputs;
+  const port = ports.find((p) => p.name === portName);
+  if (!port) return fallback;
+  const px = port.x ?? 0;
+  const py = port.y ?? 0;
+  // Distance à chacun des quatre bords ; le plus proche donne la face.
+  const dLeft = px;
+  const dRight = def.w - px;
+  const dTop = py;
+  const dBottom = def.h - py;
+  const m = Math.min(dLeft, dRight, dTop, dBottom);
+  if (m === dRight) return [1, 0];
+  if (m === dLeft) return [-1, 0];
+  if (m === dBottom) return [0, 1];
+  return [0, -1];
+}
+
 // Renvoie la largeur (en bits) d'un port donné. 1 = signal classique, >1 = bus.
 export function getPortWidth(
   comp: CircuitComponent,

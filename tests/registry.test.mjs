@@ -4,6 +4,7 @@ import {
   typeReferences,
   getPortPosition,
   getPortWidth,
+  getPortFacing,
 } from '../src/gates/registry';
 
 describe('getDef — défs natives', () => {
@@ -102,5 +103,28 @@ describe('getPortPosition / getPortWidth', () => {
     expect(getPortWidth(inp, 'out', 'output', null)).toBe(4);
     expect(getPortWidth(and, 'in0', 'input', null)).toBe(1);
     expect(getPortWidth(and, 'zzz', 'input', null)).toBe(1); // défaut
+  });
+});
+
+describe('getPortFacing — direction selon l’orientation', () => {
+  it('AND orienté à droite : sortie → droite, entrées → gauche', () => {
+    const and = { id: 'g', type: 'AND', x: 0, y: 0 };
+    expect(getPortFacing(and, 'out', 'output', null)).toEqual([1, 0]);
+    expect(getPortFacing(and, 'in0', 'input', null)).toEqual([-1, 0]);
+  });
+  it('AND orienté « down » : sortie → bas, entrées → haut', () => {
+    const and = { id: 'g', type: 'AND', x: 0, y: 0, state: { orientation: 'down' } };
+    expect(getPortFacing(and, 'out', 'output', null)).toEqual([0, 1]);
+    expect(getPortFacing(and, 'in0', 'input', null)).toEqual([0, -1]);
+  });
+  it('AND orienté « left » : sortie → gauche, entrées → droite', () => {
+    const and = { id: 'g', type: 'AND', x: 0, y: 0, state: { orientation: 'left' } };
+    expect(getPortFacing(and, 'out', 'output', null)).toEqual([-1, 0]);
+    expect(getPortFacing(and, 'in0', 'input', null)).toEqual([1, 0]);
+  });
+  it('port inconnu → repli sur la convention gauche→droite', () => {
+    const and = { id: 'g', type: 'AND', x: 0, y: 0 };
+    expect(getPortFacing(and, 'zzz', 'output', null)).toEqual([1, 0]);
+    expect(getPortFacing(and, 'zzz', 'input', null)).toEqual([-1, 0]);
   });
 });

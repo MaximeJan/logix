@@ -4,6 +4,7 @@ import {
   addrBitsFor,
   roundedRectPath,
   routeWire,
+  routeWireDirected,
   pointsToStr,
   offsetManhattan,
   makeBusTracks,
@@ -75,6 +76,41 @@ describe('routeWire', () => {
     expect(pts).toHaveLength(6);
     expect(pts[0]).toEqual([50, 0]);
     expect(pts[5]).toEqual([55, 40]);
+    expectAxial(pts);
+  });
+});
+
+describe('routeWireDirected', () => {
+  it('cas par défaut (source→droite, cible→gauche) : identique à routeWire', () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 100, y: 40 };
+    expect(routeWireDirected(a, [1, 0], b, [-1, 0])).toEqual(routeWire(a, b));
+  });
+
+  it('source orientée bas : le fil quitte le port vers le BAS', () => {
+    // Source en (50,50) pointant vers le bas, cible normale à droite.
+    const pts = routeWireDirected({ x: 50, y: 50 }, [0, 1], { x: 150, y: 200 }, [-1, 0]);
+    expect(pts[0]).toEqual([50, 50]);
+    expect(pts[pts.length - 1]).toEqual([150, 200]);
+    // Premier segment vertical descendant (x constant, y croissant).
+    expect(pts[1][0]).toBe(50);
+    expect(pts[1][1]).toBeGreaterThan(50);
+    expectAxial(pts);
+  });
+
+  it('cible orientée haut : le fil aborde le port par le HAUT', () => {
+    const pts = routeWireDirected({ x: 0, y: 0 }, [1, 0], { x: 80, y: 100 }, [0, -1]);
+    expect(pts[pts.length - 1]).toEqual([80, 100]);
+    // Dernier segment vertical (x constant) : on entre par le haut.
+    expect(pts[pts.length - 2][0]).toBe(80);
+    expect(pts[pts.length - 2][1]).toBeLessThan(100);
+    expectAxial(pts);
+  });
+
+  it('extrémité libre (dTo null) : reste axial et relie les deux points', () => {
+    const pts = routeWireDirected({ x: 50, y: 50 }, [0, 1], { x: 200, y: 90 }, null);
+    expect(pts[0]).toEqual([50, 50]);
+    expect(pts[pts.length - 1]).toEqual([200, 90]);
     expectAxial(pts);
   });
 });

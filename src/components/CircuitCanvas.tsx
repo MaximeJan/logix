@@ -6,8 +6,8 @@ import type {
 } from 'react';
 import { GRID, PORT_R } from '../lib/constants';
 import { asInt, portKey } from '../lib/sim';
-import { routeWire, pointsToStr, makeBusTracks } from '../lib/geometry';
-import { getDef, getPortPosition, getPortWidth } from '../gates/registry';
+import { routeWireDirected, pointsToStr, makeBusTracks } from '../lib/geometry';
+import { getDef, getPortPosition, getPortWidth, getPortFacing } from '../gates/registry';
 import type { Circuit, CircuitComponent, Port, SimResult, Selection, Wire } from '../domain/types';
 import type { Prefs } from '../lib/constants';
 import type { ViewBox } from '../hooks/useViewport';
@@ -142,7 +142,9 @@ export function CircuitCanvas({
         const wireWidth = getPortWidth(fromComp, w.from.port, 'output', circuit.customDefinitions);
         const value = asInt(sim.wireValues.get(w.id) ?? 0);
         const isSelected = selection.wires.includes(w.id);
-        const points = routeWire(from, to);
+        const dFrom = getPortFacing(fromComp, w.from.port, 'output', circuit.customDefinitions);
+        const dTo = getPortFacing(toComp, w.to.port, 'input', circuit.customDefinitions);
+        const points = routeWireDirected(from, dFrom, to, dTo);
         const pointsStr = pointsToStr(points);
 
         if (wireWidth === 1) {
@@ -225,16 +227,25 @@ export function CircuitCanvas({
       })}
 
       {/* FIL EN COURS DE CRÉATION */}
-      {wireStart && mousePos && wireMovedRef.current && (
-        <polyline
-          points={pointsToStr(routeWire(wireStart, mousePos))}
-          fill="none"
-          stroke="#0ea5e9"
-          strokeWidth={2}
-          strokeDasharray="5,3"
-          pointerEvents="none"
-        />
-      )}
+      {wireStart &&
+        mousePos &&
+        wireMovedRef.current &&
+        (() => {
+          const startComp = circuit.components.find((c) => c.id === wireStart.componentId);
+          const dFrom: [number, number] = startComp
+            ? getPortFacing(startComp, wireStart.port, 'output', circuit.customDefinitions)
+            : [1, 0];
+          return (
+            <polyline
+              points={pointsToStr(routeWireDirected(wireStart, dFrom, mousePos, null))}
+              fill="none"
+              stroke="#0ea5e9"
+              strokeWidth={2}
+              strokeDasharray="5,3"
+              pointerEvents="none"
+            />
+          );
+        })()}
 
       {/* CADRE DE SÉLECTION RECTANGULAIRE */}
       {rectSelect?.didMove && (

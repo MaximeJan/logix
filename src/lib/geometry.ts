@@ -79,6 +79,88 @@ export function routeWire(from: { x: number; y: number }, to: { x: number; y: nu
   ];
 }
 
+// Normale sortante d'un port : direction axiale dans laquelle le fil doit
+// quitter (sortie) ou aborder (entrée) le port. [1,0]=droite, [-1,0]=gauche,
+// [0,1]=bas, [0,-1]=haut.
+export type Dir = [number, number];
+
+const isHoriz = (d: Dir): boolean => d[1] === 0;
+
+// Retire les doublons consécutifs et fusionne les sommets colinéaires, pour
+// qu'une polyline manhattan reste minimale (pas de sommet inutile).
+function simplifyPath(pts: Point[]): Point[] {
+  const out: Point[] = [];
+  for (const p of pts) {
+    const last = out[out.length - 1];
+    if (last && last[0] === p[0] && last[1] === p[1]) continue;
+    out.push([p[0], p[1]]);
+  }
+  let i = 1;
+  while (i < out.length - 1) {
+    const a = out[i - 1];
+    const b = out[i];
+    const c = out[i + 1];
+    const collinear = (a[0] === b[0] && b[0] === c[0]) || (a[1] === b[1] && b[1] === c[1]);
+    if (collinear) out.splice(i, 1);
+    else i++;
+  }
+  return out;
+}
+
+// Tracé manhattan tenant compte de l'ORIENTATION des ports : le fil quitte la
+// source le long de `dFrom` et aborde la cible le long de `dTo` (normales
+// sortantes). Indispensable dès qu'un composant n'est pas orienté « à droite »
+// (sortie en bas, entrée en haut…), sinon le fil repart dans le composant.
+//
+// Le cas par défaut — source vers la droite, cible depuis la gauche — délègue à
+// `routeWire` : les circuits orientés normalement gardent EXACTEMENT le même
+// tracé qu'avant. `dTo` peut être null (extrémité libre, fil en cours de
+// création) : on l'oriente alors vers la source.
+export function routeWireDirected(
+  from: { x: number; y: number },
+  dFrom: Dir,
+  to: { x: number; y: number },
+  dTo: Dir | null,
+): Point[] {
+  if (dFrom[0] === 1 && dFrom[1] === 0 && dTo && dTo[0] === -1 && dTo[1] === 0) {
+    return routeWire(from, to);
+  }
+
+  const S = 20;
+  // Extrémité libre : oriente la cible vers la source, sur l'axe dominant.
+  let d2: Dir = dTo ?? [0, 0];
+  if (!dTo) {
+    const dx = from.x - to.x;
+    const dy = from.y - to.y;
+    d2 =
+      Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx) || -1, 0] : [0, Math.sign(dy) || -1];
+  }
+
+  const p1: Point = [from.x + dFrom[0] * S, from.y + dFrom[1] * S];
+  const p2: Point = [to.x + d2[0] * S, to.y + d2[1] * S];
+
+  let mid: Point[];
+  if (isHoriz(dFrom) && isHoriz(d2)) {
+    const mx = (p1[0] + p2[0]) / 2;
+    mid = [
+      [mx, p1[1]],
+      [mx, p2[1]],
+    ];
+  } else if (!isHoriz(dFrom) && !isHoriz(d2)) {
+    const my = (p1[1] + p2[1]) / 2;
+    mid = [
+      [p1[0], my],
+      [p2[0], my],
+    ];
+  } else if (isHoriz(dFrom)) {
+    mid = [[p2[0], p1[1]]];
+  } else {
+    mid = [[p1[0], p2[1]]];
+  }
+
+  return simplifyPath([[from.x, from.y], p1, ...mid, p2, [to.x, to.y]]);
+}
+
 export function pointsToStr(pts: Point[]): string {
   return pts.map((p) => `${p[0]},${p[1]}`).join(' ');
 }
