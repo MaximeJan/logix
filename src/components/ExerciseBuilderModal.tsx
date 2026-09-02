@@ -359,9 +359,9 @@ export function ExerciseBuilderModal({
               </>
             ) : (
               <>
-                La vérification apparie les Entrée/Sortie de l'élève{' '}
-                <strong>par ordre de création</strong>, pas par étiquette : précise cet ordre dans
-                les étapes.
+                La vérification apparie les Entrée/Sortie <strong>par étiquette</strong> : en mode
+                exercice, Logix nomme automatiquement les ports déposés (A, B… / S, T…), donc
+                l'ordre de placement de l'élève n'a aucune importance.
               </>
             )}
           </div>

@@ -314,6 +314,23 @@ export default function CircuitSimulator() {
   } = useTrace(circuit, sim, editMode);
 
   // -------- ACTIONS --------
+  // En contexte d'exercice, une Entrée/Sortie déposée reçoit automatiquement le
+  // prochain nom attendu libre (A, B… / S, T…). L'appariement de la vérification
+  // se faisant par étiquette, l'élève n'a plus à nommer ses ports ni à respecter
+  // un ordre de création : Logix s'en charge. Renvoie '' si rien à attribuer.
+  const nextExerciseLabel = (type: string, comps: CircuitComponent[]): string => {
+    if (!exercise) return '';
+    const expected =
+      type === 'INPUT' ? exercise.inputs : type === 'OUTPUT' ? exercise.outputs : null;
+    if (!expected) return '';
+    const norm = (s: unknown) => (typeof s === 'string' ? s.trim().toLowerCase() : '');
+    const used = new Set(comps.filter((c) => c.type === type).map((c) => norm(c.label)));
+    for (const p of expected) {
+      if (p.name && !used.has(norm(p.name))) return p.name;
+    }
+    return '';
+  };
+
   const placeComponent = (type: string, x: number, y: number) => {
     if (locked) return;
     const def = getDef(type, circuit.customDefinitions);
@@ -324,7 +341,7 @@ export default function CircuitSimulator() {
       x: snap(x),
       y: snap(y),
       state: def.defaultState ? { ...def.defaultState } : undefined,
-      label: '',
+      label: nextExerciseLabel(type, circuit.components),
     };
     commit((c) => ({ ...c, components: [...c.components, newComp] }));
   };

@@ -63,6 +63,58 @@ describe('verifyExercise — table de vérité', () => {
   });
 });
 
+describe('verifyExercise — appariement par étiquette (ordre de création indifférent)', () => {
+  // out = A ET NON B. Les INPUT sont créés dans l'ordre INVERSE (B avant A) pour
+  // prouver que seul l'étiquette compte, pas l'ordre de placement de l'élève.
+  const andNotB = (labelA, labelB) => ({
+    components: [
+      { id: 'b', type: 'INPUT', x: 0, y: 0, label: labelB, state: { value: 0, width: 1 } },
+      { id: 'a', type: 'INPUT', x: 0, y: 0, label: labelA, state: { value: 0, width: 1 } },
+      { id: 'nb', type: 'NOT', x: 0, y: 0 },
+      { id: 'and', type: 'AND', x: 0, y: 0 },
+      { id: 'o', type: 'OUTPUT', x: 0, y: 0 },
+    ],
+    wires: [
+      { id: 'w1', from: { componentId: 'b', port: 'out' }, to: { componentId: 'nb', port: 'in0' } },
+      { id: 'w2', from: { componentId: 'a', port: 'out' }, to: { componentId: 'and', port: 'in0' } },
+      { id: 'w3', from: { componentId: 'nb', port: 'out' }, to: { componentId: 'and', port: 'in1' } },
+      { id: 'w4', from: { componentId: 'and', port: 'out' }, to: { componentId: 'o', port: 'in0' } },
+    ],
+  });
+
+  const exercise = {
+    inputs: [
+      { name: 'A', width: 1 },
+      { name: 'B', width: 1 },
+    ],
+    outputs: [{ name: 'S', width: 1 }],
+    verify: { type: 'truthtable' },
+    truthTable: [
+      [[0, 0], [0]],
+      [[0, 1], [0]],
+      [[1, 0], [1]],
+      [[1, 1], [0]],
+    ],
+  };
+
+  it('réussit malgré l’ordre de création inversé quand les étiquettes correspondent', () => {
+    const res = verifyExercise(andNotB('A', 'B'), exercise, getDef);
+    expect(res.success).toBe(true);
+  });
+
+  it('apparie sans tenir compte de la casse ni des espaces', () => {
+    const res = verifyExercise(andNotB(' a ', 'B'), exercise, getDef);
+    expect(res.success).toBe(true);
+  });
+
+  it('retombe sur l’ordre de création si les étiquettes sont absentes (échoue ici)', () => {
+    // Sans étiquette → appariement positionnel : la 1re entrée créée (b) reçoit
+    // la colonne A, donc le circuit calcule B ET NON A → table fausse.
+    const res = verifyExercise(andNotB('', ''), exercise, getDef);
+    expect(res.success).toBe(false);
+  });
+});
+
 describe('verifyExercise — séquence (DFF)', () => {
   const seqCircuit = () => ({
     components: [

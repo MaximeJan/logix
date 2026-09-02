@@ -110,8 +110,10 @@ L'élève travaille sur une sauvegarde propre à l'exercice : son bac à sable p
 de point de départ à la première ouverture ; ensuite, c'est le travail de l'élève qui est restauré.
 Une URL corrompue est ignorée — l'app démarre alors normalement.
 
-> La vérification apparie les Entrée/Sortie de l'élève **par ordre de création**, pas par étiquette.
-> Précise donc l'ordre attendu dans les étapes de l'énoncé.
+> La vérification apparie les Entrée/Sortie **par étiquette** (`A`, `B`, `S`…, insensible à la
+> casse). En mode exercice, Logix nomme automatiquement chaque port déposé avec le prochain nom
+> attendu libre : l'ordre de placement de l'élève n'a donc aucune importance. Repli sur l'ordre de
+> création si les étiquettes ne couvrent pas tous les ports attendus (anciens liens préservés).
 
 ## Qualité du code
 

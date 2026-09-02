@@ -1,10 +1,36 @@
 // Vérification d'un exercice — logique pure, sans React.
-// Appariement entrées/sorties PAR ORDRE DE CRÉATION (les labels sont ignorés) :
-// les N premiers INPUT/OUTPUT du circuit de l'élève sont confrontés à la table
-// de vérité (combinatoire) ou à la séquence (séquentiel) de l'exercice.
+// Appariement entrées/sorties PAR ÉTIQUETTE quand c'est possible : chaque port
+// attendu (`A`, `B`, `S`…) est confronté à l'INPUT/OUTPUT de l'élève qui porte ce
+// nom (insensible à la casse/espaces). L'ordre de création n'a alors aucune
+// importance — un élève qui pose B avant A obtient quand même le bon verdict.
+// Repli sur l'ORDRE DE CRÉATION si les étiquettes ne forment pas un appariement
+// complet (ports non nommés, anciens liens) : comportement historique, préservé.
 import { asInt, portKey, simulate, stepSequential } from './sim';
-import type { Circuit, GetDef } from '../domain/types';
-import type { Exercise } from '../domain/exercise';
+import type { Circuit, CircuitComponent, GetDef } from '../domain/types';
+import type { Exercise, ExercisePort } from '../domain/exercise';
+
+/** Normalise une étiquette pour la comparaison (insensible casse/espaces). */
+const normLabel = (s: unknown): string => (typeof s === 'string' ? s.trim().toLowerCase() : '');
+
+/**
+ * Aligne les composants de l'élève sur les ports attendus PAR ÉTIQUETTE.
+ * Renvoie la liste des ids dans l'ordre des `expected`, ou `null` si les
+ * étiquettes ne couvrent pas tous les ports attendus de façon univoque (dans ce
+ * cas l'appelant retombe sur l'ordre de création).
+ */
+function orderByLabel(comps: CircuitComponent[], expected: ExercisePort[]): string[] | null {
+  const used = new Set<string>();
+  const ids: string[] = [];
+  for (const port of expected) {
+    const want = normLabel(port.name);
+    if (!want) return null; // port attendu sans nom → pas d'appariement par étiquette
+    const found = comps.find((c) => !used.has(c.id) && normLabel(c.label) === want);
+    if (!found) return null; // aucune étiquette correspondante → repli sur l'ordre
+    used.add(found.id);
+    ids.push(found.id);
+  }
+  return ids;
+}
 
 /** Une ligne de résultat : valeurs injectées, attendues, obtenues, et verdict. */
 export interface ExerciseRow {
@@ -62,9 +88,14 @@ export function verifyExercise(
     };
   }
 
-  // Utilise les N premiers INPUT et OUTPUT (ordre de création)
-  const inputIds = inputComps.slice(0, exercise.inputs.length).map((c) => c.id);
-  const outputIds = outputComps.slice(0, exercise.outputs.length).map((c) => c.id);
+  // Apparie par étiquette si l'élève a nommé ses ports comme l'énoncé ; sinon,
+  // repli sur les N premiers INPUT/OUTPUT (ordre de création — historique).
+  const inputIds =
+    orderByLabel(inputComps, exercise.inputs) ??
+    inputComps.slice(0, exercise.inputs.length).map((c) => c.id);
+  const outputIds =
+    orderByLabel(outputComps, exercise.outputs) ??
+    outputComps.slice(0, exercise.outputs.length).map((c) => c.id);
 
   // Injecte des valeurs sur les INPUT repérés par leur id.
   const withInputs = (c: Circuit, inVals: number[]): Circuit => ({
