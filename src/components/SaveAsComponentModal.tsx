@@ -10,6 +10,8 @@ export interface SaveAsCompState {
   name: string;
   inputs: CompPort[];
   outputs: CompPort[];
+  /** Mode « mini-calculatrice » : entrées cliquables, sorties affichées. */
+  interactive: boolean;
 }
 
 interface SaveAsComponentModalProps {
@@ -105,6 +107,20 @@ export function SaveAsComponentModal({
 
           {renderPorts('inputs', "Ports d'entrée")}
           {renderPorts('outputs', 'Ports de sortie')}
+
+          <label className="flex items-start gap-2 pt-2 border-t border-stone-200 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={state.interactive}
+              onChange={(e) => setState({ ...state, interactive: e.target.checked })}
+              className="mt-0.5"
+            />
+            <span className="text-xs text-stone-600">
+              <span className="font-medium text-stone-700">Composant interactif</span> — les entrées
+              deviennent cliquables et les sorties affichent leur valeur, directement dans la boîte.
+              Une mini-calculatrice autonome, sans câbler d'Entrée/Sortie autour.
+            </span>
+          </label>
 
           <div className="text-xs text-stone-500 pt-2 border-t border-stone-200">
             Le sous-circuit complet (composants + fils) sera enregistré comme définition. Les

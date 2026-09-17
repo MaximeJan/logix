@@ -8,6 +8,7 @@ import {
 } from './lib/persist';
 import { verifyExercise } from './lib/exercise-verify';
 import { buildCustomDefData } from './lib/custom-def';
+import { interactiveLayout, hitTestInteractiveCell } from './lib/custom-interactive';
 import { readUrlContext } from './lib/url-params';
 import { EMBED_PARAM } from './lib/exercise-url';
 import { GRID, INPUT_BUS_CELL_SIZE } from './lib/constants';
@@ -441,6 +442,40 @@ export default function CircuitSimulator() {
     }));
   };
 
+  // Convertit un événement souris en coordonnées locales au composant (repère SVG).
+  const toLocalPoint = (
+    e: ReactMouseEvent,
+    comp: CircuitComponent,
+  ): { x: number; y: number } | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const p = pt.matrixTransform(ctm.inverse());
+    return { x: p.x - comp.x, y: p.y - comp.y };
+  };
+
+  // Composant custom interactif : bascule le bit `bitIdx` de l'entrée `inputIndex`
+  // (valeur stockée dans state.inValues). Hors historique, comme les Entrées.
+  const toggleInteractiveBit = (id: string, inputIndex: number, bitIdx: number) => {
+    setCircuit((c) => ({
+      ...c,
+      components: c.components.map((x) => {
+        if (x.id !== id) return x;
+        const d = getDef(x.type, c.customDefinitions, x);
+        const width = d?.inputs[inputIndex]?.width ?? 1;
+        if (bitIdx < 0 || bitIdx >= width) return x;
+        const cur = [...(x.state?.inValues ?? [])];
+        while (cur.length <= inputIndex) cur.push(0);
+        cur[inputIndex] = maskTo(width, asInt(cur[inputIndex]) ^ (1 << bitIdx));
+        return { ...x, state: { ...(x.state ?? {}), inValues: cur } };
+      }),
+    }));
+  };
+
   // Bascule la valeur d'une horloge manuelle (clic sur le composant).
   // Si elle est en mode auto-running, on ne fait rien (la pause se règle dans Propriétés).
   const toggleClock = (id: string) => {
@@ -619,10 +654,18 @@ export default function CircuitSimulator() {
       .sort((a, b) => a.y - b.y || a.x - b.x)
       .map((c, i) => ({ id: c.id, label: c.label || '', name: c.label || `out${i}` }));
 
+    // En édition, on repart du réglage interactif existant de la définition.
+    const existingDef = editMode
+      ? (circuit.customDefinitions?.[editMode.definitionName] as
+          | { interactive?: boolean }
+          | undefined)
+      : undefined;
+
     setSaveAsCompState({
       name: editMode?.definitionName || '',
       inputs,
       outputs,
+      interactive: !!existingDef?.interactive,
     });
   };
 
@@ -633,7 +676,7 @@ export default function CircuitSimulator() {
   // - En mode édition : enregistre la définition modifiée et restaure le circuit principal.
   const confirmSaveAsComp = () => {
     if (!saveAsCompState) return;
-    const { name, inputs, outputs } = saveAsCompState;
+    const { name, inputs, outputs, interactive } = saveAsCompState;
     const trimmed = name.trim();
     if (!trimmed) {
       alert('Donnez un nom au composant.');
@@ -691,7 +734,14 @@ export default function CircuitSimulator() {
     }
 
     // Construit la donnée de définition (pure) : ports valides, largeurs, clones.
-    const newDef = buildCustomDefData(trimmed, inputs, outputs, sourceComps, internalWires);
+    const newDef = buildCustomDefData(
+      trimmed,
+      inputs,
+      outputs,
+      sourceComps,
+      internalWires,
+      interactive,
+    );
 
     if (editMode) {
       // === MODE ÉDITION ===
@@ -1023,6 +1073,16 @@ export default function CircuitSimulator() {
       toggleClock(comp.id);
       return;
     }
+    // Composant custom interactif : un clic bascule le bit de la cellule visée.
+    const def = getDef(comp.type, circuit.customDefinitions, comp);
+    if (def?.interactive) {
+      const local = toLocalPoint(e, comp);
+      if (!local) return;
+      const L = interactiveLayout(def.customName ?? comp.type, def.inputs, def.outputs);
+      const hit = hitTestInteractiveCell(L, local.x, local.y);
+      if (hit) toggleInteractiveBit(comp.id, hit.inputIndex, hit.bitIdx);
+      return;
+    }
     if (comp.type !== 'INPUT') return;
     const width = comp.state?.width ?? 1;
     if (width === 1) {
@@ -1030,16 +1090,10 @@ export default function CircuitSimulator() {
       return;
     }
     // Bus : on détermine quel bit a été cliqué en fonction de la position locale.
-    const svg = svgRef.current;
-    if (!svg) return;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return;
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const p = pt.matrixTransform(ctm.inverse());
-    const localX = p.x - comp.x;
-    const localY = p.y - comp.y;
+    const local = toLocalPoint(e, comp);
+    if (!local) return;
+    const localX = local.x;
+    const localY = local.y;
     // La rangée de cellules occupe x ∈ [0, width*cellSize] et y ∈ [12, 46]
     // (geom : h=52, cellY=12, cellH=34)
     const cellSize = INPUT_BUS_CELL_SIZE;

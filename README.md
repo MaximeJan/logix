@@ -46,7 +46,9 @@ Phases terminées :
 - Câblage manhattan avec routage automatique
 - Sauvegarde / chargement JSON
 - Undo / redo, copier-coller, sélection rectangulaire
-- Composants personnalisés (encapsuler un sous-circuit dans une seule boîte)
+- Composants personnalisés (encapsuler un sous-circuit dans une seule boîte), avec un mode
+  **interactif** en option : les entrées deviennent cliquables et les sorties affichent leur
+  valeur — une mini-calculatrice autonome en un seul composant (ex. un additionneur encapsulé)
 - Bus visualisé en nappe parallèle, MSB côté extérieur
 - Multiplexeur, démultiplexeur, décodeur — reconfigurables 1-bit ou bus
 - Splitter, merger

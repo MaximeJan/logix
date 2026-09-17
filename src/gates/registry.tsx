@@ -4,6 +4,7 @@
 import { GATES } from './index';
 import { applyOrientation, simulate as simulateCore } from '../lib/sim';
 import { uprightTransform } from '../lib/geometry';
+import { interactiveLayout } from '../lib/custom-interactive';
 import type { Circuit, CircuitComponent, ResolvedDef, SimResult, Wire } from '../domain/types';
 
 interface CustomPort {
@@ -18,11 +19,70 @@ export interface CustomDefData {
   inputs: CustomPort[];
   outputs: CustomPort[];
   circuit: { components: CircuitComponent[]; wires: Wire[] };
+  /** Mode « mini-calculatrice » : entrées cliquables, sorties affichées. */
+  interactive?: boolean;
+}
+
+// Composant custom INTERACTIF : entrées cliquables + sorties affichées, dans une
+// seule boîte (mini-calculatrice). Les cellules et valeurs sont dessinées par le
+// canevas (il a l'état + la simulation) ; la shape ne pose que la boîte + le
+// titre, ce qui suffit à l'aperçu de palette. `fixedDisplay` : jamais tournée.
+function buildInteractiveDef(name: string, data: CustomDefData): ResolvedDef {
+  const L = interactiveLayout(name, data.inputs, data.outputs);
+  const inRowY = new Map(L.rows.filter((r) => r.kind === 'in').map((r) => [r.index, r.y]));
+  const inputs = data.inputs.map((p, i) => ({
+    name: p.name,
+    internalId: p.internalId,
+    x: 0,
+    y: inRowY.get(i) ?? 0,
+    width: p.width ?? 1,
+  }));
+  const outputs = L.outPorts.map((op) => ({
+    name: op.name,
+    internalId: op.internalId,
+    x: op.x,
+    y: op.y,
+    width: op.width,
+  }));
+
+  return {
+    label: name,
+    category: 'Custom',
+    w: L.w,
+    h: L.h,
+    inputs,
+    outputs,
+    isCustom: true,
+    interactive: true,
+    fixedDisplay: true,
+    customName: name,
+    customCircuit: data.circuit,
+    defaultState: { inValues: data.inputs.map(() => 0) },
+    shape: () => (
+      <>
+        <rect x={0} y={0} width={L.w} height={L.h} rx={5} fill="#fefdf8" />
+        <line x1={0} y1={L.titleH} x2={L.w} y2={L.titleH} stroke="#e7e5e4" strokeWidth={1} />
+        <text
+          x={L.w / 2}
+          y={15}
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="600"
+          fontFamily="'IBM Plex Sans', sans-serif"
+          fill="#1f2937"
+          style={{ userSelect: 'none' }}
+        >
+          {name}
+        </text>
+      </>
+    ),
+  };
 }
 
 // Construit un "def" type-gate à partir d'une définition stockée.
 // Le résultat est compatible avec le reste du code (positions des ports, shape SVG…).
 function buildCustomDef(name: string, data: CustomDefData): ResolvedDef {
+  if (data.interactive) return buildInteractiveDef(name, data);
   const nIn = data.inputs.length;
   const nOut = data.outputs.length;
   const maxPorts = Math.max(nIn, nOut, 1);

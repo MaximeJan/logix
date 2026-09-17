@@ -260,17 +260,22 @@ export function simulate(
       if (recursionStack.has(comp.type)) {
         outVals = def.outputs.map(() => 0);
       } else {
+        // Interactif (mini-calculatrice) : les entrées ne sont pas câblées, leur
+        // valeur vient des clics stockés dans state.inValues. Sinon : valeurs des
+        // fils arrivant sur les ports d'entrée (inputVals).
+        const selfVals = (comp.state?.inValues as number[] | undefined) ?? [];
         const childComponents = def.customCircuit!.components.map((c) => {
           if (c.type !== 'INPUT') return c;
           const portIdx = def.inputs.findIndex((p) => p.internalId === c.id);
           if (portIdx < 0) return c;
           const portWidth = def.inputs[portIdx]?.width ?? 1;
+          const raw = def.interactive ? selfVals[portIdx] : inputVals[portIdx];
           return {
             ...c,
             state: {
               ...(c.state ?? {}),
               width: portWidth,
-              value: maskTo(portWidth, asInt(inputVals[portIdx])),
+              value: maskTo(portWidth, asInt(raw)),
             },
           };
         });

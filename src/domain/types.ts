@@ -28,6 +28,7 @@ export interface ComponentState {
   sources?: number; // nœud BUS : nombre d'émetteurs
   hi?: number; // SLICE : bit de poids fort du champ extrait
   lo?: number; // SLICE : bit de poids faible du champ extrait
+  inValues?: number[]; // composant custom interactif : valeur cliquée par entrée
   mem?: number[];
   pixels?: number[];
   cols?: number;
@@ -93,6 +94,10 @@ export interface ResolvedDef {
   outputs: Port[];
   fn?: (ins: number[]) => number[];
   isCustom?: boolean;
+  /** Nom d'un composant personnalisé (= son type). */
+  customName?: string;
+  /** Composant custom interactif : entrées cliquables, sorties affichées. */
+  interactive?: boolean;
   customCircuit?: { components: CircuitComponent[]; wires: Wire[] };
   defaultState?: ComponentState;
   nativeW?: number;

@@ -209,6 +209,13 @@ Constantes (`rectLayout.ts`) : `STUB=14, SPACING=24, EDGE_PAD=10, PORT_END_PAD=1
 
 Pour les composants qui ont des **labels qui doivent rester droits malgré la rotation** (sans passer par `fixedDisplay`), utiliser `<UprightText angle={angle} textAnchor=…>` qui se contre-tourne autour de son ancre.
 
+### Composant personnalisé interactif (mini-calculatrice)
+
+Un composant encapsulé peut être marqué **`interactive`** (case à cocher dans `SaveAsComponentModal`, propagée par `buildCustomDefData` → `CustomDefData.interactive`). Ses **entrées deviennent cliquables** (comme une Entrée) et ses **sorties affichent leur valeur** (comme une Sortie), le tout dans une seule boîte : une mini-calculatrice autonome, sans câbler d'Entrée/Sortie autour (ex. un additionneur encapsulé).
+
+- Géométrie pure et partagée dans `lib/custom-interactive.ts` : `interactiveLayout(name, inputs, outputs)` (une colonne, entrées en haut, sorties en dessous) et `hitTestInteractiveCell(layout, localX, localY)`. Utilisée par `buildCustomDef` (dimensions + ports de sortie sur le bord droit, `fixedDisplay: true`), par `CircuitCanvas` (couche qui dessine cellules + valeurs, elle a la simu + l'état) et par l'orchestrateur (détection du clic).
+- La valeur cliquée de chaque entrée vit dans **`comp.state.inValues[i]`** (indexé par ordre des ports d'entrée). Le clic bascule le bit via `toggleInteractiveBit` (hors historique, comme les Entrées). En interactif, `buildCustomDef` ne rend **pas** de ports d'entrée câblables ; `simulate()` pilote les INPUT internes depuis `inValues` au lieu des fils. Les **sorties restent câblables** (bord droit) en plus d'être affichées.
+
 ## Conventions de code
 
 - **Pas de booléens dans le simulateur.** Tout est entier. `asInt(v)` normalise (booléens, undefined, null → 0/1).

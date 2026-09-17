@@ -24,6 +24,7 @@ export function buildCustomDefData(
   outputs: PortMapping[],
   sourceComps: CircuitComponent[],
   internalWires: Wire[],
+  interactive = false,
 ): CustomDefData {
   const portWidthFor = (id: string) => {
     const internal = sourceComps.find((c) => c.id === id);
@@ -44,5 +45,6 @@ export function buildCustomDefData(
       components: sourceComps.map((c) => ({ ...c })),
       wires: internalWires.map((w) => ({ ...w, from: { ...w.from }, to: { ...w.to } })),
     },
+    ...(interactive ? { interactive: true } : {}),
   };
 }

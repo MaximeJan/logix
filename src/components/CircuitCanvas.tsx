@@ -7,6 +7,7 @@ import type {
 import { GRID, PORT_R } from '../lib/constants';
 import { asInt, portKey } from '../lib/sim';
 import { routeWireDirected, pointsToStr, makeBusTracks } from '../lib/geometry';
+import { interactiveLayout } from '../lib/custom-interactive';
 import { getDef, getPortPosition, getPortWidth, getPortFacing } from '../gates/registry';
 import type { Circuit, CircuitComponent, Port, SimResult, Selection, Wire } from '../domain/types';
 import type { Prefs } from '../lib/constants';
@@ -288,7 +289,9 @@ export function CircuitCanvas({
             onClick={(e) => onComponentClick(e, comp)}
             style={{
               cursor:
-                comp.type === 'INPUT' || (comp.type === 'CLOCK' && !comp.state?.running)
+                comp.type === 'INPUT' ||
+                def.interactive ||
+                (comp.type === 'CLOCK' && !comp.state?.running)
                   ? 'pointer'
                   : 'move',
             }}
@@ -349,7 +352,93 @@ export function CircuitCanvas({
                 {comp.label}
               </text>
             )}
-            {def.inputs.map((p) => {
+            {/* Composant custom interactif : cellules d'entrée cliquables (valeur
+                depuis state.inValues) + valeurs de sortie (depuis la simulation). */}
+            {def.interactive &&
+              (() => {
+                const L = interactiveLayout(def.customName ?? comp.type, def.inputs, def.outputs);
+                const inVals = comp.state?.inValues ?? [];
+                const half = L.cell / 2;
+                return (
+                  <g>
+                    {L.rows.map((row) => {
+                      const label = (
+                        <text
+                          x={L.padX}
+                          y={row.y + 3.5}
+                          fontSize="10"
+                          fontFamily="'IBM Plex Mono', monospace"
+                          fill="#64748b"
+                          style={{ userSelect: 'none', pointerEvents: 'none' }}
+                        >
+                          {row.name}
+                        </text>
+                      );
+                      if (row.kind === 'in') {
+                        const val = asInt(inVals[row.index]);
+                        const cells = [];
+                        for (let c = 0; c < row.width; c++) {
+                          const bitIdx = row.width - 1 - c; // MSB à gauche
+                          const on = (val >> bitIdx) & 1;
+                          const x = L.cellsX + c * L.cell;
+                          cells.push(
+                            <g key={c}>
+                              <rect
+                                x={x}
+                                y={row.y - half}
+                                width={L.cell - 2}
+                                height={L.cell}
+                                rx={2}
+                                fill={on ? 'var(--input-on, #84cc16)' : 'white'}
+                                stroke="#1f2937"
+                                strokeWidth={1}
+                                pointerEvents="none"
+                              />
+                              <text
+                                x={x + (L.cell - 2) / 2}
+                                y={row.y + 3.5}
+                                textAnchor="middle"
+                                fontSize="10"
+                                fontWeight="700"
+                                fontFamily="'IBM Plex Mono', monospace"
+                                fill={on ? '#1a2e05' : '#94a3b8'}
+                                style={{ userSelect: 'none', pointerEvents: 'none' }}
+                              >
+                                {on ? '1' : '0'}
+                              </text>
+                            </g>,
+                          );
+                        }
+                        return (
+                          <g key={`in${row.index}`}>
+                            {label}
+                            {cells}
+                          </g>
+                        );
+                      }
+                      const outVal = asInt(sim.outValues.get(portKey(comp.id, row.name)) ?? 0);
+                      return (
+                        <g key={`out${row.index}`}>
+                          {label}
+                          <text
+                            x={L.cellsX}
+                            y={row.y + 4}
+                            fontSize="12"
+                            fontWeight="700"
+                            fontFamily="'IBM Plex Mono', monospace"
+                            fill="#0369a1"
+                            style={{ userSelect: 'none', pointerEvents: 'none' }}
+                          >
+                            {outVal}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </g>
+                );
+              })()}
+            {!def.interactive &&
+              def.inputs.map((p) => {
               const v = sim.inputValues.get(portKey(comp.id, p.name));
               const portWidth = p.width ?? 1;
               const isBus = portWidth > 1;
