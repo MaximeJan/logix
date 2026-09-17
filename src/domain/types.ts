@@ -98,6 +98,13 @@ export interface ResolvedDef {
   customName?: string;
   /** Composant custom interactif : entrées cliquables, sorties affichées. */
   interactive?: boolean;
+  /** Géométrie dépendant de l'état (orientation, largeurs…) — cf. getDef. */
+  getDynamicGeometry?: (comp: CircuitComponent) => {
+    w?: number;
+    h?: number;
+    inputs: Port[];
+    outputs: Port[];
+  };
   customCircuit?: { components: CircuitComponent[]; wires: Wire[] };
   defaultState?: ComponentState;
   nativeW?: number;

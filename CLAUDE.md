@@ -193,7 +193,7 @@ exercice, `PalettePanel` sinon.
 
 ### Composants rectangulaires « à dessin fixe » (`fixedDisplay`)
 
-Pour les composants rectangulaires complexes (SR-latch, DFF, REG, COUNTER, RAM, ADDER, SEG7…) qui contiennent un LCD/des libellés et qui ne supportent pas bien d'être réellement tournés, on utilise le modèle **`fixedDisplay: true`** :
+Pour les composants rectangulaires complexes (SR-latch, DFF, REG, COUNTER, RAM, ADDER, SEG7 **et les composants personnalisés**) qui contiennent un LCD/des libellés et qui ne supportent pas bien d'être réellement tournés, on utilise le modèle **`fixedDisplay: true`** :
 
 1. La `shape` n'est **jamais** rotée par `CircuitCanvas` (angle 0). Le contenu reste droit, peu importe l'orientation.
 2. C'est `getDynamicGeometry(comp)` qui place les ports sur le **bord** correspondant à l'orientation (`right`→gauche/droite, `down`→haut/bas, etc.).
@@ -208,6 +208,10 @@ Pour les composants rectangulaires complexes (SR-latch, DFF, REG, COUNTER, RAM, 
 Constantes (`rectLayout.ts`) : `STUB=14, SPACING=24, EDGE_PAD=10, PORT_END_PAD=12, CLK_GAP=8`. Le label d'un port marqué `clk: true` est automatiquement décalé de `CLK_GAP` pour laisser passer le triangle ▷.
 
 Pour les composants qui ont des **labels qui doivent rester droits malgré la rotation** (sans passer par `fixedDisplay`), utiliser `<UprightText angle={angle} textAnchor=…>` qui se contre-tourne autour de son ancre.
+
+### Composants personnalisés (encapsulation)
+
+Un composant personnalisé (non interactif) est une **boîte `fixedDisplay`** construite via `rectLayout` (`buildCustomDef` → `customLayout` dans `registry.tsx`), exactement comme ADDER/REG. Le boîtier et le nom restent **droits** ; l'orientation ne fait que replacer les ports sur le bon bord (le nom ne « sort » plus de la boîte quand on tourne). `getDef` applique donc `getDynamicGeometry(comp)` au custom (pas `applyOrientation`) ; `rectLayout` ne portant pas `internalId`, on le réattache par index (indispensable à la simulation : `def.inputs[i].internalId` ↔ id de l'INPUT interne).
 
 ### Composant personnalisé interactif (mini-calculatrice)
 

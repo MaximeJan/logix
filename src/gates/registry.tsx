@@ -3,9 +3,17 @@
 // et les helpers de ports.
 import { GATES } from './index';
 import { applyOrientation, simulate as simulateCore } from '../lib/sim';
-import { uprightTransform } from '../lib/geometry';
 import { interactiveLayout } from '../lib/custom-interactive';
-import type { Circuit, CircuitComponent, ResolvedDef, SimResult, Wire } from '../domain/types';
+import { rectLayout } from './rectLayout';
+import { RectShape } from './RectShape';
+import type {
+  Circuit,
+  CircuitComponent,
+  Port,
+  ResolvedDef,
+  SimResult,
+  Wire,
+} from '../domain/types';
 
 interface CustomPort {
   name: string;
@@ -79,105 +87,86 @@ function buildInteractiveDef(name: string, data: CustomDefData): ResolvedDef {
   };
 }
 
+// Disposition d'un composant personnalisé (non interactif) : c'est une boîte
+// rectangulaire « à dessin fixe » (comme ADDER/REG…), d'où l'usage de rectLayout.
+// La boîte et le nom restent DROITS ; l'orientation ne fait que déplacer les ports
+// sur le bord adéquat (le nom ne « sort » plus de la boîte quand on tourne).
+function customLayout(name: string, data: CustomDefData, comp?: CircuitComponent) {
+  const maxLen = (ports: CustomPort[]) => ports.reduce((m, p) => Math.max(m, p.name.length), 0);
+  const CHAR = 7; // ~ largeur d'un caractère mono 12px (labels de port)
+  const inMargin = data.inputs.length ? Math.max(12, maxLen(data.inputs) * CHAR + 8) : 10;
+  const outMargin = data.outputs.length ? Math.max(12, maxLen(data.outputs) * CHAR + 8) : 10;
+  const contentW = Math.max(28, Math.ceil(name.length * 6.5)); // place pour le nom centré
+  return rectLayout({
+    orientation: comp?.state?.orientation,
+    inputs: data.inputs.map((p) => ({ name: p.name, label: p.name, width: p.width ?? 1 })),
+    outputs: data.outputs.map((p) => ({ name: p.name, label: p.name, width: p.width ?? 1 })),
+    contentW,
+    contentH: 18,
+    inMargin,
+    outMargin,
+  });
+}
+
 // Construit un "def" type-gate à partir d'une définition stockée.
 // Le résultat est compatible avec le reste du code (positions des ports, shape SVG…).
 function buildCustomDef(name: string, data: CustomDefData): ResolvedDef {
   if (data.interactive) return buildInteractiveDef(name, data);
-  const nIn = data.inputs.length;
-  const nOut = data.outputs.length;
-  const maxPorts = Math.max(nIn, nOut, 1);
-  // Hauteur : 20px de marge en haut, 20px par port, 20px en bas
-  const h = Math.max(50, maxPorts * 20 + 20);
-  // Largeur calibrée sur la longueur du nom
-  const w = Math.max(80, Math.ceil((name.length * 7 + 30) / 20) * 20);
 
-  const portY = (i: number, n: number) => {
-    if (n === 1) return Math.round(h / 2 / 10) * 10;
-    const span = (n - 1) * 20;
-    const top = Math.round((h - span) / 2 / 10) * 10;
-    return top + i * 20;
+  // rectLayout ne connaît pas `internalId` (nécessaire à la simulation d'un
+  // custom : def.inputs[i].internalId ↔ id de l'INPUT interne). On le réattache
+  // par index, l'ordre étant préservé par rectLayout.
+  const attachIds = (ports: Port[], src: CustomPort[]): Port[] =>
+    ports.map((p, i) => ({ ...p, internalId: src[i]?.internalId }));
+  const geometry = (comp?: CircuitComponent) => {
+    const L = customLayout(name, data, comp);
+    return {
+      w: L.w,
+      h: L.h,
+      content: L.content,
+      inputs: attachIds(L.inputs, data.inputs),
+      outputs: attachIds(L.outputs, data.outputs),
+    };
   };
-
-  const inputs = data.inputs.map((p, i) => ({
-    name: p.name,
-    internalId: p.internalId,
-    x: 0,
-    y: portY(i, nIn),
-    width: p.width ?? 1,
-  }));
-  const outputs = data.outputs.map((p, i) => ({
-    name: p.name,
-    internalId: p.internalId,
-    x: w,
-    y: portY(i, nOut),
-    width: p.width ?? 1,
-  }));
+  const base = geometry();
 
   return {
     label: name,
     category: 'Custom',
-    w,
-    h,
-    inputs,
-    outputs,
+    w: base.w,
+    h: base.h,
+    inputs: base.inputs,
+    outputs: base.outputs,
     isCustom: true,
     customName: name,
     customCircuit: data.circuit,
-    shape: (
-      _comp: CircuitComponent,
-      _o?: number,
-      _i?: number,
-      _ibn?: Record<string, number>,
-      angle?: number,
-    ) => (
-      <>
-        <rect x="0" y="0" width={w} height={h} rx="4" fill="#fefdf8" />
-        <text
-          x={w / 2}
-          y={14}
-          textAnchor="middle"
-          fontSize="11"
-          fontWeight="600"
-          fontFamily="'IBM Plex Sans', sans-serif"
-          fill="#1f2937"
-          transform={uprightTransform(angle, w / 2, 10)}
-          style={{ userSelect: 'none' }}
-        >
-          {name}
-        </text>
-        {/* Étiquettes des ports d'entrée */}
-        {inputs.map((p) => (
+    fixedDisplay: true,
+    defaultState: {},
+    // Ports replacés sur le bon bord selon l'orientation (dessin non tourné).
+    getDynamicGeometry: (comp) => {
+      const g = geometry(comp);
+      return { w: g.w, h: g.h, inputs: g.inputs, outputs: g.outputs };
+    },
+    shape: (comp) => {
+      const L = customLayout(name, data, comp);
+      const { content } = L;
+      return (
+        <RectShape layout={L}>
           <text
-            key={'li' + p.name}
-            x={7}
-            y={p.y + 3}
-            fontSize="9"
-            fontFamily="'IBM Plex Mono', monospace"
-            fill="#64748b"
-            transform={uprightTransform(angle, 7, p.y)}
-            style={{ userSelect: 'none' }}
+            x={content.x + content.w / 2}
+            y={content.y + content.h / 2 + 4}
+            textAnchor="middle"
+            fontSize="11"
+            fontWeight="600"
+            fontFamily="'IBM Plex Sans', sans-serif"
+            fill="#1f2937"
+            style={{ userSelect: 'none', pointerEvents: 'none' }}
           >
-            {p.name}
+            {name}
           </text>
-        ))}
-        {/* Étiquettes des ports de sortie */}
-        {outputs.map((p) => (
-          <text
-            key={'lo' + p.name}
-            x={w - 7}
-            y={p.y + 3}
-            textAnchor="end"
-            fontSize="9"
-            fontFamily="'IBM Plex Mono', monospace"
-            fill="#64748b"
-            transform={uprightTransform(angle, w - 7, p.y)}
-            style={{ userSelect: 'none' }}
-          >
-            {p.name}
-          </text>
-        ))}
-      </>
-    ),
+        </RectShape>
+      );
+    },
   };
 }
 
@@ -215,6 +204,16 @@ export function getDef(
   if (!cached) {
     cached = buildCustomDef(type, data);
     customDefCache.set(data, cached);
+  }
+  // Custom « à dessin fixe » (boîte rectangulaire, ou mini-calculatrice) : on ne
+  // tourne PAS le dessin ; getDynamicGeometry replace les ports selon l'orientation.
+  if (cached.fixedDisplay) {
+    if (cached.getDynamicGeometry) {
+      const fakeComp = comp ?? ({ state: cached.defaultState } as CircuitComponent);
+      const dyn = cached.getDynamicGeometry(fakeComp);
+      return { ...cached, ...dyn };
+    }
+    return cached;
   }
   return applyOrientation(cached, comp?.state?.orientation);
 }
