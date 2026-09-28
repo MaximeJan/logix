@@ -57,7 +57,11 @@ interface ToolbarProps {
   onTogglePreferences: () => void;
   hasManualClock: boolean;
   onTick: () => void;
-  hasCycle: boolean;
+  /**
+   * Boucle qui ne se stabilise pas (oscille). Une boucle stable (bascule SR en
+   * portes) n'est pas signalée : c'est un montage légitime.
+   */
+  unstable: boolean;
   /** ≥1 nœud BUS avec deux sources actives simultanément. */
   busConflict: boolean;
   wireWidthMismatch: { wFrom: number; wTo: number } | null;
@@ -97,7 +101,7 @@ export function Toolbar({
   onTogglePreferences,
   hasManualClock,
   onTick,
-  hasCycle,
+  unstable,
   busConflict,
   wireWidthMismatch,
 }: ToolbarProps) {
@@ -303,9 +307,12 @@ export function Toolbar({
         </button>
       )}
 
-      {hasCycle && (
-        <div className={`text-rose-600 bg-rose-50 rounded border border-rose-200 ${badge}`}>
-          ⚠ Cycle détecté
+      {unstable && (
+        <div
+          className={`text-rose-600 bg-rose-50 rounded border border-rose-200 ${badge}`}
+          title="Une boucle du circuit ne se stabilise jamais (ex. une porte NOT reliée à elle-même)"
+        >
+          ⚠ Circuit instable : il oscille
         </div>
       )}
       {busConflict && (

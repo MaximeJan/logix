@@ -15,7 +15,9 @@ export function useCircuitEngine(
 ) {
   // 1. Logique séquentielle (le `lastTriggerAt` est purement visuel)
   useEffect(() => {
-    const next = stepSequential(circuit, getDef);
+    // `sim.outValues` : état courant des boucles (bascules en portes), pour que
+    // les bascules D/registres lisent les mêmes valeurs que l'affichage.
+    const next = stepSequential(circuit, getDef, sim.outValues);
     const changed = next !== circuit && next.components !== circuit.components;
     if (!changed) return;
     const components = next.components.map((comp, idx) => {
