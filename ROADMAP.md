@@ -65,6 +65,13 @@ courant. Il n'y a **pas** de catalogue d'exercices : un exercice n'existe que da
 embarquer Logix en iframe dans un site de théorie ; le téléchargement du circuit y reste possible.
 Chaque exercice a sa propre sauvegarde locale : le bac à sable de l'élève n'est jamais écrasé.
 
+Confort (QoL) : en iframe, la vue démarre recadrée (75 % max, ou zoom imposé par l'enseignant),
+la barre d'outils est compacte avec des boutons de zoom, et la palette passe en grille de tuiles.
+Un exercice existant se **modifie** en recollant son lien dans le générateur (formulaire
+pré-rempli, circuit de départ rouvert dans un onglet) ; l'enseignant choisit si les élèves
+conservent le travail commencé. Le brouillon du générateur survit à la fermeture de la fenêtre,
+les ports se déduisent du circuit, et « Tester en iframe » montre l'exercice à la bonne hauteur.
+
 ## Idées hors phase
 
 - Signaler la réussite au site parent (`postMessage`) pour qu'il coche la progression de l'élève.

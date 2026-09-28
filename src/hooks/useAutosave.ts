@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { storage } from '../lib/storage';
 import { STORAGE_KEY } from '../lib/constants';
 import type { TabsState } from '../domain/types';
@@ -11,6 +11,10 @@ import type { TabsState } from '../domain/types';
 //
 // `storageKey` permet d'isoler une session : un exercice ouvert par URL utilise
 // sa propre clé, pour ne jamais écraser le bac à sable personnel de l'élève.
+//
+// Renvoie `loaded` : faux tant que la sauvegarde n'a pas été lue (le chargement
+// est asynchrone). Sert à cadrer la vue initiale sur le circuit réellement
+// restauré, pas sur celui qui s'affiche une fraction de seconde avant.
 export function useAutosave(
   tabsState: TabsState,
   setTabsState: (state: TabsState) => void,
@@ -18,7 +22,8 @@ export function useAutosave(
   serializeAll: (state: TabsState) => unknown,
   deserializeAll: (data: unknown) => TabsState,
   storageKey: string = STORAGE_KEY,
-) {
+): boolean {
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     (async () => {
       try {
@@ -28,6 +33,8 @@ export function useAutosave(
         }
       } catch {
         // pas grave : on démarre vide
+      } finally {
+        setLoaded(true);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -45,4 +52,6 @@ export function useAutosave(
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabsState, editMode]);
+
+  return loaded;
 }

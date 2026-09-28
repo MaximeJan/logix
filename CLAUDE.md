@@ -36,8 +36,13 @@ src/
     constants.ts           GRID, PORT_R, STORAGE_KEY, PALETTE_ORDER, DEFAULT_PREFS…
     bits.ts, storage.ts    formatBitsGrouped ; adaptateur de stockage
     exercise-verify.ts     verifyExercise(circuit, exercise, getDef, options)
-    exercise-url.ts        encode/decodeExercise, buildExerciseUrl, payloadHash
-    url-params.ts          readUrlContext() : ?ex=… &embed=1 → { exercise, embed, storageKey }
+    exercise-url.ts        encode/decodeExercise, buildExerciseUrl, payloadHash,
+                           parseExerciseLink, exerciseStorageId
+    exercise-draft.ts      brouillon du générateur : ExerciseDraft ↔ Exercise,
+                           portsFromCircuit
+    tab-import.ts          usedCustomDefs, mergeImportedTab (rouvrir un preset)
+    viewport.ts            circuitBounds, viewForBounds, zoomView (cadrage iframe)
+    url-params.ts          readUrlContext() : ?ex=… &embed=1 &test=1 → { exercise, embed, storageKey }
   gates/                   définitions des composants primitifs :
     types.ts               interfaces GateDef / DynamicGeometry (dont `fixedDisplay`)
     shared.tsx             helpers de rendu partagés (bitCells, seg7Layout)
@@ -64,7 +69,8 @@ src/
     useViewport, useKeyboardShortcuts
 tests/                     Vitest (.mjs) : sim-core (importe la VRAIE GATES),
                            geometry, bits, registry, custom-def, exercise-url,
-                           exercise-verify, run.test (logique + persist)
+                           exercise-verify, exercise-draft, tab-import, viewport,
+                           run.test (logique + persist)
 ```
 
 ## Comment développer
@@ -134,12 +140,31 @@ L'app reste 100 % statique.
   l'orchestrateur : pas de routeur, pas de réaction aux changements d'URL. `urlCtx.exercise` est
   donc constant pour toute la session ; l'orchestrateur ne garde que le verdict
   (`exerciseResult`).
-- Un exercice-URL a sa **propre clé d'autosave** (`circuit:autosave:ex:<hash>`, `payloadHash`) :
-  le bac à sable de l'élève n'est jamais écrasé et un rafraîchissement conserve son travail.
+- Un exercice-URL a sa **propre clé d'autosave** (`circuit:autosave:ex:<id>`) : le bac à sable
+  de l'élève n'est jamais écrasé et un rafraîchissement conserve son travail. `<id>` =
+  `exerciseStorageId(exercise, payload)` : l'**identifiant stable** `exercise.id` (clé `d`) s'il
+  existe, sinon `payloadHash(payload)` (comportement historique). `&test=1` (liens « Tester » du
+  générateur) force `test:<payloadHash>` : l'enseignant qui reteste une nouvelle version repart
+  de son circuit de départ au lieu de retomber sur son essai précédent.
 - `ExerciseBuilderModal` génère ces URLs. Son bouton « Remplir les sorties depuis le circuit
   courant » appelle `verifyExercise(..., { stopOnFirstFailure: false })` et récupère les
-  `actualOutVals` de toutes les lignes. Il propose aussi la hauteur (px) de l'extrait `<iframe>`,
-  et ne produit que **deux** champs à copier : « Lien de l'exercice » et « `<iframe>` ».
+  `actualOutVals` de toutes les lignes. Il propose aussi la hauteur (px) de l'extrait `<iframe>`
+  et le zoom initial, et ne produit que **deux** champs à copier : « Lien de l'exercice » et
+  « `<iframe>` ». « Déduire des Entrée/Sortie du circuit » remplit les ports
+  (`portsFromCircuit`), « Tester en iframe » ouvre une page d'aperçu (blob) à la bonne hauteur.
+- **Le brouillon du générateur vit dans l'orchestrateur** (`builderDraft`, type `ExerciseDraft`
+  de `lib/exercise-draft.ts`) : fermer la modale pour retoucher le circuit ne perd rien. La
+  conversion brouillon ↔ exercice (`draftToExercise` / `exerciseToDraft`) est pure et testée.
+- **Modifier un exercice** : « Modifier un exercice existant » (en tête du générateur) accepte le
+  lien, l'extrait `<iframe>` ou le payload nu (`parseExerciseLink`, qui récupère aussi la
+  hauteur). Le brouillon est pré-rempli et le circuit préchargé est rouvert dans un onglet via
+  `importExercisePreset` → `mergeImportedTab` (`lib/tab-import.ts`, pur) : un onglet actif vide
+  est remplacé, une définition perso homonyme mais différente est **renommée** « Nom (2) » (avec
+  celles qui l'utilisent) pour ne jamais toucher aux définitions de l'enseignant. La case
+  « Conserver le travail déjà commencé par les élèves » (cochée par défaut) reprend l'ancien
+  identifiant de sauvegarde dans `exercise.id`. Le lien change dans tous les cas.
+- Le preset n'embarque que les définitions perso **réellement utilisées** par le circuit
+  (`usedCustomDefs`, transitif), pas toute la bibliothèque de l'enseignant.
 - En mode embed, le bouton **Télécharger** (JSON) reste dans la barre d'outils : l'élève doit
   pouvoir rendre sa solution. Seul le *chargement* d'un JSON est masqué. La barre y ajoute aussi
   **« Ouvrir sur Logix »** (`onOpenFull`) : `window.open` de l'URL courante **sans** `&embed=1`
@@ -153,6 +178,12 @@ L'app reste 100 % statique.
   **optionnelles** : un ancien lien sans elles décode avec `preset` absent et `locked:false`,
   comportement identique à avant. `MAX_PAYLOAD` est monté à 64 Ko pour laisser passer un petit
   circuit ; le builder prévient si le lien dépasse ce plafond.
+- `exercise.zoom` (clé `z`, en %, borné 25-200, absent = auto) règle la **vue initiale en
+  iframe**. À 100 % les composants y paraissent trop gros : en embed, l'orchestrateur cadre la vue
+  une seule fois, quand le `<svg>` est mesuré **et** que l'autosave a été lu (`useAutosave`
+  renvoie `loaded`), pour cadrer le circuit réellement restauré. Zoom imposé → cette échelle ;
+  sinon recadrage du circuit (`circuitBounds` + `viewForBounds`, `lib/viewport.ts`) sans dépasser
+  `EMBED_DEFAULT_SCALE` (75 %). Hors embed, rien ne change (vue à 100 %).
 
 **Circuit préchargé et démos.** Le preset se sème dans **l'état initial** de `tabsState`
 (`useState(() => deserializeAll(preset))`), pas via un effet : l'autosave (qui n'écrit/écrase que
@@ -181,10 +212,13 @@ dans une iframe basse.
 
 `SCALE` (dans `ExercisePanel.tsx`) définit deux échelles : `normal` (site) et `compact` (embed).
 En embed, le texte de consigne, les espacements et le padding du panneau sont réduits — la largeur
-`w-52` ne change pas, pour que la consigne reste lisible. **`PaletteItem` fait exception** : sa
-prop `compact` réduit la hauteur de rangée mais garde l'icône et le nom du composant
-lisibles (aperçu 32-40 px, libellé `text-xs`) — c'est le pictogramme qui aide l'élève à
-retrouver le composant, pas la taille de la rangée qui l'entoure.
+`w-52` ne change pas, pour que la consigne reste lisible. Les composants y passent en **grille de
+tuiles, deux par rangée** : la prop `compact` de `PaletteItem` pose l'icône (boîte fixe
+72×26 px, proportions gardées) au-dessus du nom (`text-[10px]`, tronqué avec infobulle).
+
+En embed, la **barre d'outils est compacte** (boutons 28 px, icônes 14 px, logo réduit,
+« Apparence » masqué) et remplace « Reset vue » par des boutons toujours visibles **−, %, +,
+Ajuster** (`zoomView` / recadrage, cf. `exercise.zoom` ci-dessus).
 
 Le panneau gauche est l'un ou l'autre, sans bascule : `ExercisePanel` si l'URL portait un
 exercice, `PalettePanel` sinon.

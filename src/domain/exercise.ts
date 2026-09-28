@@ -54,4 +54,17 @@ export interface Exercise {
    * (souvent combiné à `preset`).
    */
   locked: boolean;
+  /**
+   * Zoom initial du canevas en iframe, en pourcentage (ex. 75). Absent = auto :
+   * le circuit est recadré pour tenir dans la vue (sans dépasser le zoom par
+   * défaut de l'iframe). N'a d'effet qu'en mode embed.
+   */
+  zoom?: number;
+  /**
+   * Identifiant stable de l'exercice. Absent = l'identifiant est le hash du lien
+   * (comportement historique). Un exercice modifié qui reprend l'identifiant de
+   * sa version précédente partage sa sauvegarde locale : l'élève retrouve le
+   * travail commencé sur l'ancien lien.
+   */
+  id?: string;
 }

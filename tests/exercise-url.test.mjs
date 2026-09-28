@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { encodeExercise, decodeExercise, payloadHash } from '../src/lib/exercise-url';
+import {
+  encodeExercise,
+  decodeExercise,
+  payloadHash,
+  parseExerciseLink,
+  exerciseStorageId,
+} from '../src/lib/exercise-url';
 import { verifyExercise } from '../src/lib/exercise-verify';
 import { getDef } from '../src/gates/registry';
 import { GATES } from '../src/gates';
@@ -273,6 +279,67 @@ describe('exercice décodé → verifyExercise', () => {
     expect(res.success).toBe(false);
     expect(res.table).toHaveLength(2);
     expect(res.table.map((r) => r.actualOutVals)).toEqual([[0], [1]]);
+  });
+});
+
+describe('zoom initial et identifiant stable', () => {
+  const rawOf = (payload) => JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+  const withRaw = (patch) =>
+    btoa(JSON.stringify({ ...rawOf(encodeExercise(notExercise)), ...patch }));
+
+  it('font un aller-retour fidèle', () => {
+    const ex = { ...notExercise, zoom: 60, id: 'k3x9' };
+    expect(decodeExercise(encodeExercise(ex), { isKnownType })).toEqual(ex);
+  });
+
+  it('sont absents par défaut (ancien lien : zoom auto, id = hash)', () => {
+    const payload = encodeExercise(notExercise);
+    expect(rawOf(payload).z).toBeUndefined();
+    expect(rawOf(payload).d).toBeUndefined();
+    const decoded = decodeExercise(payload, { isKnownType });
+    expect('zoom' in decoded).toBe(false);
+    expect('id' in decoded).toBe(false);
+  });
+
+  it('borne le zoom et ignore une valeur non numérique', () => {
+    expect(decodeExercise(withRaw({ z: 5 }), { isKnownType }).zoom).toBe(25);
+    expect(decodeExercise(withRaw({ z: 999 }), { isKnownType }).zoom).toBe(200);
+    expect(decodeExercise(withRaw({ z: '75' }), { isKnownType }).zoom).toBeUndefined();
+  });
+
+  it("ignore un identifiant qui n'est pas court et alphanumérique", () => {
+    expect(decodeExercise(withRaw({ d: 'a:b' }), { isKnownType }).id).toBeUndefined();
+    expect(decodeExercise(withRaw({ d: 'x'.repeat(40) }), { isKnownType }).id).toBeUndefined();
+    expect(decodeExercise(withRaw({ d: 42 }), { isKnownType }).id).toBeUndefined();
+  });
+
+  it("exerciseStorageId : l'identifiant stable prime sur le hash du lien", () => {
+    const payload = encodeExercise(notExercise);
+    expect(exerciseStorageId(notExercise, payload)).toBe(payloadHash(payload));
+    expect(exerciseStorageId({ ...notExercise, id: 'abc' }, payload)).toBe('abc');
+  });
+});
+
+describe('parseExerciseLink', () => {
+  const payload = encodeExercise(notExercise);
+
+  it('lit un lien complet', () => {
+    expect(parseExerciseLink(`https://logix.test/app/?ex=${payload}`)).toEqual({ payload });
+  });
+
+  it("lit l'extrait <iframe> avec sa hauteur", () => {
+    const snippet = `<iframe src="https://logix.test/?ex=${payload}&embed=1" width="100%" height="540" style="border:0"></iframe>`;
+    expect(parseExerciseLink(snippet)).toEqual({ payload, height: 540 });
+  });
+
+  it('accepte le payload nu et ignore les espaces autour', () => {
+    expect(parseExerciseLink(`  ${payload}\n`)).toEqual({ payload });
+  });
+
+  it('renvoie null quand rien ne ressemble à un exercice', () => {
+    expect(parseExerciseLink('')).toBeNull();
+    expect(parseExerciseLink('https://logix.test/?foo=1')).toBeNull();
+    expect(parseExerciseLink('bonjour tout le monde')).toBeNull();
   });
 });
 

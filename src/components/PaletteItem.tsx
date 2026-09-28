@@ -18,7 +18,10 @@ export function PaletteItem({
   customDefs: Record<string, unknown> | null | undefined;
   onEdit?: (type: string) => void;
   onDelete?: (type: string) => void;
-  /** Variante deux fois plus petite (panneau d'exercice en iframe). */
+  /**
+   * Variante « tuile » (panneau d'exercice en iframe) : icône au-dessus, nom en
+   * petit dessous, pour une grille de deux composants par rangée.
+   */
   compact?: boolean;
 }) {
   const def = getDef(type, customDefs ?? null);
@@ -27,21 +30,33 @@ export function PaletteItem({
   // ViewBox adapté à la taille réelle (utile pour SPLITTER/MERGER et les composants custom).
   const needsDynamic = isCustom || def.w > 60 || def.h > 40;
   const viewBox = needsDynamic ? `-3 -3 ${def.w + 6} ${def.h + 6}` : '-3 -2 70 44';
-  // Compact (panneau d'exercice en iframe) : la rangée reste plus fine que la
-  // palette normale, mais l'icône et le nom du composant restent lisibles —
-  // c'est le pictogramme qui aide l'élève à retrouver le composant, pas la
-  // taille de la rangée qui l'entoure.
-  const previewMaxH = compact ? 40 : 56;
-  const baseH = compact ? 32 : 44;
-  const svgH = needsDynamic ? Math.min(previewMaxH, def.h + 6) : baseH;
-  const svgW = needsDynamic ? Math.round((def.w + 6) * (svgH / (def.h + 6))) : compact ? 48 : 66;
-  return (
-    <div className="relative group">
+
+  const preview = (width: number, height: number) => (
+    <svg width={width} height={height} viewBox={viewBox} className="shrink-0 pointer-events-none">
+      <g
+        stroke="#1f2937"
+        strokeWidth={1.5}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {def.shape?.({ state: def.defaultState } as CircuitComponent, 0, 0)}
+      </g>
+    </svg>
+  );
+
+  // Tuile : l'aperçu tient dans une boîte fixe (la tuile fait ~95 px de large),
+  // proportions conservées. Toutes les tuiles ont donc la même hauteur.
+  if (compact) {
+    const TILE_W = 72;
+    const TILE_H = 26;
+    const [vbW, vbH] = needsDynamic ? [def.w + 6, def.h + 6] : [70, 44];
+    const k = Math.min(TILE_W / vbW, TILE_H / vbH, 1);
+    return (
       <HoverTooltip text={def.label as string} onlyIfTruncated>
         <button
           onMouseDown={(e) => onMouseDown(e, type)}
-          className={`w-full flex items-center rounded-lg border transition select-none
-            ${compact ? 'gap-2 px-2 py-1' : 'gap-3 px-3 py-2'}
+          className={`w-full h-full flex flex-col items-center justify-center gap-0.5 rounded-md border px-1 pt-1 pb-0.5 transition select-none
             ${
               picked
                 ? 'border-amber-500 bg-amber-50'
@@ -49,28 +64,37 @@ export function PaletteItem({
             }`}
           style={{ fontFamily: "'IBM Plex Sans', sans-serif", cursor: 'grab' }}
         >
-          <svg
-            width={svgW}
-            height={svgH}
-            viewBox={viewBox}
-            className="shrink-0 pointer-events-none"
-          >
-            <g
-              stroke="#1f2937"
-              strokeWidth={1.5}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              {def.shape?.({ state: def.defaultState } as CircuitComponent, 0, 0)}
-            </g>
-          </svg>
+          <span className="flex items-center justify-center" style={{ height: TILE_H }}>
+            {preview(Math.round(vbW * k), Math.round(vbH * k))}
+          </span>
           <span
             data-truncate
-            className={`font-medium text-stone-700 truncate min-w-0 ${
-              compact ? 'text-xs' : 'text-sm'
-            }`}
+            className="max-w-full truncate text-[10px] leading-tight font-medium text-stone-700"
           >
+            {def.label as string}
+          </span>
+        </button>
+      </HoverTooltip>
+    );
+  }
+
+  const svgH = needsDynamic ? Math.min(56, def.h + 6) : 44;
+  const svgW = needsDynamic ? Math.round((def.w + 6) * (svgH / (def.h + 6))) : 66;
+  return (
+    <div className="relative group">
+      <HoverTooltip text={def.label as string} onlyIfTruncated>
+        <button
+          onMouseDown={(e) => onMouseDown(e, type)}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition select-none
+            ${
+              picked
+                ? 'border-amber-500 bg-amber-50'
+                : 'border-stone-200 bg-white hover:border-stone-400 hover:bg-stone-50'
+            }`}
+          style={{ fontFamily: "'IBM Plex Sans', sans-serif", cursor: 'grab' }}
+        >
+          {preview(svgW, svgH)}
+          <span data-truncate className="font-medium text-stone-700 truncate min-w-0 text-sm">
             {def.label as string}
           </span>
         </button>

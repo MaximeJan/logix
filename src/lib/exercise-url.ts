@@ -8,7 +8,8 @@
 //   { v:1, t:titre, o:objectif, s:[étapes], a:[typesAutorisés],
 //     i:[[nom,largeur]], u:[[nom,largeur]], k:'tt'|'seq'|'none', r:[[[in],[out]]],
 //     p:1 (auto-ouverture Propriétés, optionnel), l:1 (circuit verrouillé,
-//     optionnel), c:{circuit sérialisé} (préchargé, optionnel) }
+//     optionnel), c:{circuit sérialisé} (préchargé, optionnel),
+//     z:zoom en % (iframe, optionnel), d:identifiant stable (optionnel) }
 // puis JSON → UTF-8 → base64url.
 //
 // Le payload vient de l'URL : c'est une donnée NON FIABLE. `decodeExercise` ne
@@ -24,6 +25,12 @@ export const EXERCISE_FORMAT_VERSION = 1;
 export const EXERCISE_PARAM = 'ex';
 /** Nom du paramètre d'URL activant l'UI allégée (iframe). */
 export const EMBED_PARAM = 'embed';
+/**
+ * Nom du paramètre d'URL des liens « Tester » du générateur : la sauvegarde
+ * locale est alors propre à CETTE version du lien, pour que l'enseignant ne
+ * retombe pas sur son essai précédent quand l'exercice garde son identifiant.
+ */
+export const TEST_PARAM = 'test';
 
 // Plafonds d'assainissement — largement au-dessus d'un usage pédagogique normal,
 // mais suffisants pour empêcher une URL forgée de faire ramer l'app.
@@ -35,6 +42,10 @@ const MAX_STEPS = 30;
 const MAX_PORTS = 16;
 const MAX_ROWS = 512;
 const MAX_WIDTH = 32;
+
+/** Bornes du zoom initial d'un exercice (en %). */
+export const ZOOM_MIN = 25;
+export const ZOOM_MAX = 200;
 
 // ---------------------------------------------------------------- base64url
 
@@ -78,6 +89,8 @@ interface WireExercise {
   p?: 1;
   l?: 1;
   c?: unknown;
+  z?: number;
+  d?: string;
 }
 
 const wireKind = (v: Verify): WireKind =>
@@ -104,6 +117,8 @@ export function encodeExercise(exercise: Exercise): string {
     ...(exercise.autoOpenProperties ? { p: 1 } : {}),
     ...(exercise.locked ? { l: 1 } : {}),
     ...(exercise.preset ? { c: exercise.preset } : {}),
+    ...(exercise.zoom !== undefined ? { z: exercise.zoom } : {}),
+    ...(exercise.id ? { d: exercise.id } : {}),
   };
   const bytes = new TextEncoder().encode(JSON.stringify(wire));
   return toBase64Url(bytesToBase64(bytes));
@@ -144,6 +159,18 @@ const cell = (v: unknown): number => {
   return Number.isFinite(n) ? n >>> 0 : 0;
 };
 
+// Zoom initial en % : entier borné, absent si invalide (→ mode auto).
+function parseZoom(v: unknown): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(v)));
+}
+
+// Identifiant stable : court et alphanumérique (il finit dans une clé de
+// stockage), absent sinon.
+const ID_RE = /^[a-z0-9]{1,16}$/i;
+const parseId = (v: unknown): string | undefined =>
+  typeof v === 'string' && ID_RE.test(v) ? v : undefined;
+
 function parseRows(v: unknown): IoRow[] {
   if (!Array.isArray(v)) return [];
   const rows: IoRow[] = [];
@@ -182,6 +209,8 @@ export function decodeExercise(payload: string, opts: DecodeOptions = {}): Exerc
   // Un exercice sans titre n'est pas exploitable, quel que soit son mode.
   if (!title) return null;
 
+  const zoom = parseZoom(data.z);
+  const id = parseId(data.d);
   const base = {
     title,
     objective: text(data.o),
@@ -194,6 +223,8 @@ export function decodeExercise(payload: string, opts: DecodeOptions = {}): Exerc
     // Circuit préchargé : on ne garde que si c'est un objet. Son contenu reste
     // non fiable ; il sera assaini par `deserializeAll` avant tout usage.
     ...(isObj(data.c) ? { preset: data.c } : {}),
+    ...(zoom !== undefined ? { zoom } : {}),
+    ...(id !== undefined ? { id } : {}),
   };
 
   // Exercice libre : ni ports ni lignes obligatoires, pas de bouton « Vérifier ».
@@ -215,12 +246,43 @@ function appBaseUrl(): string {
   return window.location.origin + window.location.pathname;
 }
 
-/** Construit l'URL partageable d'un exercice (optionnellement en mode embed). */
-export function buildExerciseUrl(exercise: Exercise, options: { embed?: boolean } = {}): string {
+/**
+ * Construit l'URL partageable d'un exercice (optionnellement en mode embed, ou
+ * en lien de test du générateur — voir TEST_PARAM).
+ */
+export function buildExerciseUrl(
+  exercise: Exercise,
+  options: { embed?: boolean; test?: boolean } = {},
+): string {
   const params = new URLSearchParams();
   params.set(EXERCISE_PARAM, encodeExercise(exercise));
   if (options.embed) params.set(EMBED_PARAM, '1');
+  if (options.test) params.set(TEST_PARAM, '1');
   return `${appBaseUrl()}?${params.toString()}`;
+}
+
+/**
+ * Extrait le payload d'un exercice de ce que l'enseignant colle pour le
+ * modifier : le lien, l'extrait `<iframe>` complet, ou le payload nu. Récupère
+ * au passage la hauteur de l'iframe si elle y figure. Renvoie null si rien ne
+ * ressemble à un exercice (le décodage proprement dit reste à faire).
+ */
+export function parseExerciseLink(text: string): { payload: string; height?: number } | null {
+  const src = text.trim();
+  if (!src) return null;
+  const fromParam = new RegExp(`(?:[?&;]|^)${EXERCISE_PARAM}=([A-Za-z0-9_-]+)`).exec(src);
+  const payload = fromParam?.[1] ?? (/^[A-Za-z0-9_-]+$/.test(src) ? src : null);
+  if (!payload) return null;
+  const h = /\bheight\s*=\s*["']?(\d+)/i.exec(src);
+  return h ? { payload, height: Number(h[1]) } : { payload };
+}
+
+/**
+ * Identifiant de sauvegarde d'un exercice : son identifiant stable s'il en a un
+ * (exercice modifié qui conserve le travail des élèves), sinon le hash du lien.
+ */
+export function exerciseStorageId(exercise: Exercise, payload: string): string {
+  return exercise.id ?? payloadHash(payload);
 }
 
 /**

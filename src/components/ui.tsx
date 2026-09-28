@@ -5,11 +5,14 @@ export function ToolbarButton({
   onClick,
   title,
   disabled,
+  compact,
   children,
 }: {
   onClick?: () => void;
   title?: string;
   disabled?: boolean;
+  /** Variante plus petite (barre d'outils en iframe). */
+  compact?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -17,7 +20,7 @@ export function ToolbarButton({
       onClick={onClick}
       title={title}
       disabled={disabled}
-      className={`w-8 h-8 flex items-center justify-center rounded transition
+      className={`${compact ? 'w-7 h-7' : 'w-8 h-8'} flex items-center justify-center rounded transition
         ${disabled ? 'text-stone-300 cursor-not-allowed' : 'text-stone-700 hover:bg-stone-100 active:bg-stone-200'}`}
     >
       {children}
@@ -25,8 +28,8 @@ export function ToolbarButton({
   );
 }
 
-export function Separator() {
-  return <div className="w-px h-5 bg-stone-200 mx-1" />;
+export function Separator({ compact }: { compact?: boolean }) {
+  return <div className={`w-px bg-stone-200 ${compact ? 'h-4 mx-0.5' : 'h-5 mx-1'}`} />;
 }
 
 export function ColorRow({

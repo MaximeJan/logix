@@ -15,6 +15,7 @@ import {
   buildCircuit,
   fillTruthTable,
   listComponents,
+  readExercise,
   DEFAULT_BASE_URL,
 } from './logix.mjs';
 
@@ -85,7 +86,8 @@ const TOOLS = [
       'séquentiel (un tick par ligne). Pour une DÉMO ou un circuit de départ, passe « circuit » ' +
       '(description haut niveau, auto-construite/validée) ; « locked:true » la rend non ' +
       'modifiable. Appuie-toi sur list_components pour les allowedTypes et sur fill_truth_table ' +
-      'pour les rows.',
+      'pour les rows. Pour MODIFIER un exercice existant : read_exercise, retouche le spec, ' +
+      'puis repasse-le ici (garde « id » pour que les élèves conservent leur travail).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -130,8 +132,36 @@ const TOOLS = [
           description: `Base où Logix est servi. Défaut : ${DEFAULT_BASE_URL}`,
         },
         iframeHeight: { type: 'number', description: "Hauteur de l'iframe en px (200–2000, défaut 700)." },
+        zoom: {
+          type: 'number',
+          description:
+            "Zoom initial du canevas dans l'iframe, en % (25–200). Omis = auto : le circuit de " +
+            'départ est recadré pour tenir dans la vue (75 % au plus).',
+        },
+        id: {
+          type: 'string',
+          description:
+            "Identifiant de sauvegarde (1–16 caractères alphanumériques). Reprends celui renvoyé " +
+            'par read_exercise pour que les élèves retrouvent leur travail sur le nouveau lien ; ' +
+            'omets-le pour une sauvegarde neuve (ex. si le circuit de départ a changé).',
+        },
       },
       required: ['title'],
+    },
+  },
+  {
+    name: 'read_exercise',
+    description:
+      'Relit un exercice Logix existant pour le MODIFIER : accepte le lien, l\'extrait <iframe> ou ' +
+      'le payload. Renvoie { spec } au format de build_exercise (titre, étapes, ports, rows, ' +
+      'preset, zoom, iframeHeight, baseUrl, id). Retouche le spec puis repasse-le à ' +
+      'build_exercise. Le lien change dans tous les cas : il faut remplacer l\'ancien dans le cours.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        link: { type: 'string', description: "Lien de l'exercice, extrait <iframe> ou payload." },
+      },
+      required: ['link'],
     },
   },
   {
@@ -183,7 +213,7 @@ const TOOLS = [
   },
 ];
 
-const server = new Server({ name: 'logix', version: '0.1.0' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'logix', version: '0.2.0' }, { capabilities: { tools: {} } });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
@@ -195,6 +225,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     else if (name === 'build_circuit') result = buildCircuit(args);
     else if (name === 'fill_truth_table') result = fillTruthTable(args);
     else if (name === 'list_components') result = listComponents();
+    else if (name === 'read_exercise') result = readExercise(args);
     else throw new Error(`Outil inconnu : ${name}`);
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   } catch (err) {

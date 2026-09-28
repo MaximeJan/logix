@@ -119,9 +119,14 @@ export function CircuitCanvas({
           )}
         </pattern>
       </defs>
+      {/* Le fond suit la vue (avec une marge) : sinon, après un pan/zoom ou un
+          recadrage vers des coordonnées négatives, la grille ne couvre plus
+          qu'une partie du canevas. */}
       <rect
-        width="100%"
-        height="100%"
+        x={viewBox ? viewBox.x - viewBox.w : 0}
+        y={viewBox ? viewBox.y - viewBox.h : 0}
+        width={viewBox ? viewBox.w * 3 : '100%'}
+        height={viewBox ? viewBox.h * 3 : '100%'}
         fill={prefs.gridStyle === 'off' ? 'transparent' : 'url(#grid)'}
         data-canvas-bg="true"
       />
