@@ -28,8 +28,8 @@ interface ExercisePanelProps {
 
 // Deux échelles de rendu pour le panneau. En iframe (embed) la place verticale
 // est comptée : on garde la même largeur (la consigne doit rester lisible) mais
-// tout le contenu tient sur ~la moitié de la hauteur. Sur le site normal, rien
-// ne change.
+// tout le contenu tient sur ~la moitié de la hauteur, et les composants passent
+// en grille de tuiles (deux par rangée). Sur le site normal, rien ne change.
 const SCALE = {
   normal: {
     panelPad: 'p-3',
@@ -107,7 +107,8 @@ export function ExercisePanel({
             <div className={`font-semibold text-stone-500 uppercase tracking-wider ${S.heading}`}>
               Composants
             </div>
-            <div className={S.list}>
+            {/* En iframe : grille de tuiles, deux composants par rangée. */}
+            <div className={embed ? 'grid grid-cols-2 gap-1' : S.list}>
               {exercise.allowedTypes.map((t) => (
                 <PaletteItem
                   key={t}

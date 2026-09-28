@@ -1,14 +1,22 @@
 // Lecture des paramètres d'URL au démarrage de l'app.
 //
-// Deux paramètres seulement :
+// Trois paramètres seulement :
 //   ?ex=<payload>  un exercice complet encodé (voir lib/exercise-url.ts)
 //   &embed=1       UI allégée, pour embarquer l'app en iframe dans un site tiers
+//   &test=1        lien « Tester » du générateur : sauvegarde propre à la version
 //
 // À appeler une seule fois au montage (useMemo(…, [])) : on ne réagit pas aux
 // changements d'URL ultérieurs, l'app n'a pas de routeur.
 
 import { GATES } from '../gates';
-import { decodeExercise, payloadHash, EMBED_PARAM, EXERCISE_PARAM } from './exercise-url';
+import {
+  decodeExercise,
+  exerciseStorageId,
+  payloadHash,
+  EMBED_PARAM,
+  EXERCISE_PARAM,
+  TEST_PARAM,
+} from './exercise-url';
 import { STORAGE_KEY } from './constants';
 import type { Exercise } from '../domain/exercise';
 
@@ -37,5 +45,11 @@ export function readUrlContext(): UrlContext {
   const exercise = decodeExercise(payload, { isKnownType: (t) => !!GATES[t] });
   if (!exercise) return { ...empty, embed };
 
-  return { exercise, embed, storageKey: `${STORAGE_KEY}:ex:${payloadHash(payload)}` };
+  // Un lien de test a toujours sa propre sauvegarde, liée à la version exacte :
+  // l'enseignant qui reteste après une modification repart du nouveau circuit.
+  const storageId =
+    params.get(TEST_PARAM) === '1'
+      ? `test:${payloadHash(payload)}`
+      : exerciseStorageId(exercise, payload);
+  return { exercise, embed, storageKey: `${STORAGE_KEY}:ex:${storageId}` };
 }

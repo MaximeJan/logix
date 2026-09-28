@@ -11,6 +11,9 @@ import { buildCustomDefData } from './lib/custom-def';
 import { interactiveLayout, hitTestInteractiveCell } from './lib/custom-interactive';
 import { readUrlContext } from './lib/url-params';
 import { EMBED_PARAM } from './lib/exercise-url';
+import { circuitBounds, viewForBounds, zoomView, EMBED_DEFAULT_SCALE } from './lib/viewport';
+import { EMPTY_DRAFT, type ExerciseDraft } from './lib/exercise-draft';
+import { mergeImportedTab } from './lib/tab-import';
 import { GRID, INPUT_BUS_CELL_SIZE } from './lib/constants';
 import { GATES } from './gates';
 import {
@@ -215,8 +218,11 @@ export default function CircuitSimulator() {
   // ---- Exercice ----
   // Verdict de la dernière vérification (null tant que l'élève n'a pas cliqué).
   const [exerciseResult, setExerciseResult] = useState<ExerciseResult | null>(null);
-  // Modale de création d'exercice partageable (générateur d'URL).
+  // Modale de création d'exercice partageable (générateur d'URL). Son brouillon
+  // vit ici, pas dans la modale : la fermer pour retoucher le circuit ne perd
+  // rien, on la rouvre et on reprend où on en était.
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderDraft, setBuilderDraft] = useState<ExerciseDraft>(EMPTY_DRAFT);
 
   // ---- Préférences d'apparence (chargement/sauvegarde gérés par le hook) ----
   const [prefs, setPrefs] = usePrefs();
@@ -254,6 +260,7 @@ export default function CircuitSimulator() {
   const {
     svgRef,
     viewBox,
+    setView,
     viewBoxBaseRef,
     panRef,
     getSvgPoint,
@@ -265,7 +272,43 @@ export default function CircuitSimulator() {
   } = useViewport();
 
   // -------- AUTO-SAUVEGARDE du circuit --------
-  useAutosave(tabsState, setTabsState, editMode, serializeAll, deserializeAll, urlCtx.storageKey);
+  const autosaveLoaded = useAutosave(
+    tabsState,
+    setTabsState,
+    editMode,
+    serializeAll,
+    deserializeAll,
+    urlCtx.storageKey,
+  );
+
+  // -------- CADRAGE EN IFRAME --------
+  // À 100 %, les composants paraissent trop gros dans une iframe. En embed, la
+  // vue démarre donc plus loin : zoom imposé par l'exercice (`zoom`), sinon
+  // recadrage automatique du circuit (préchargé ou restauré) sans dépasser
+  // EMBED_DEFAULT_SCALE. « Ajuster » (barre d'outils) recadre de la même façon.
+  const embedMaxScale = exercise?.zoom !== undefined ? exercise.zoom / 100 : EMBED_DEFAULT_SCALE;
+  const fitView = useCallback(
+    (scale?: number) => {
+      const base = viewBoxBaseRef.current;
+      if (!base) return;
+      const bounds = circuitBounds(circuit.components, (c) =>
+        getDef(c.type, circuit.customDefinitions ?? null, c),
+      );
+      setView(viewForBounds(bounds, base, { scale, maxScale: embedMaxScale }));
+    },
+    [circuit, embedMaxScale, setView, viewBoxBaseRef],
+  );
+  const zoomStep = (factor: number) => {
+    const base = viewBoxBaseRef.current;
+    if (base && viewBox) setView(zoomView(viewBox, base, factor));
+  };
+  // Une seule fois, quand la taille du canevas est mesurée ET la sauvegarde lue.
+  const initialViewDoneRef = useRef(false);
+  useEffect(() => {
+    if (!embed || !autosaveLoaded || !viewBox || initialViewDoneRef.current) return;
+    initialViewDoneRef.current = true;
+    fitView(exercise?.zoom !== undefined ? exercise.zoom / 100 : undefined);
+  }, [embed, autosaveLoaded, viewBox, fitView, exercise]);
 
   // -------- PANNEAU DROIT : ouverture/fermeture auto --------
   // Sélectionner un composant ouvre « Propriétés » ; cliquer à côté (désélection)
@@ -1295,6 +1338,39 @@ export default function CircuitSimulator() {
     });
   }, []);
 
+  // « Modifier un exercice existant » (générateur) : le circuit préchargé de
+  // l'exercice est rouvert dans un onglet du bac à sable, où l'enseignant peut
+  // le retoucher — il redevient le « circuit courant » que le générateur
+  // embarque. La fusion (onglet vide remplacé, définitions en conflit
+  // renommées) est de la logique pure : voir lib/tab-import.
+  const importExercisePreset = (
+    preset: unknown,
+    name: string,
+  ): { error?: string; notice?: string } => {
+    if (editMode) return { error: "Termine d'abord l'édition du composant en cours." };
+    let loaded: TabsState;
+    try {
+      loaded = deserializeAll(preset);
+    } catch {
+      return { error: 'Le circuit de départ de cet exercice est illisible.' };
+    }
+    const tab = { ...loaded.tabs[0], name: name.trim().slice(0, 40) || loaded.tabs[0].name };
+    const res = mergeImportedTab(tabsState, tab, loaded.customDefinitions, MAX_TABS);
+    if ('error' in res) return { error: res.error };
+    setTabsState(res.state);
+    if (res.replacedTabId) dropTabHistory(res.replacedTabId);
+    setSelection({ components: [], wires: [] });
+    setPlaceType(null);
+    setWireStart(null);
+    const renamed = Object.entries(res.renamed);
+    if (renamed.length === 0) return {};
+    return {
+      notice: `Composant(s) personnalisé(s) renommé(s) pour ne pas écraser les tiens : ${renamed
+        .map(([from, to]) => `« ${from} » → « ${to} »`)
+        .join(', ')}.`,
+    };
+  };
+
   // -------- RENDU --------
   return (
     <div
@@ -1330,6 +1406,9 @@ export default function CircuitSimulator() {
         viewBox={viewBox}
         viewBoxBase={viewBoxBaseRef.current}
         onResetView={resetView}
+        onZoomIn={() => zoomStep(1.25)}
+        onZoomOut={() => zoomStep(1 / 1.25)}
+        onFitView={() => fitView()}
         onOpenBuilder={() => setBuilderOpen(true)}
         preferencesOpen={rightPanelMode === 'preferences'}
         onTogglePreferences={() =>
@@ -1475,7 +1554,10 @@ export default function CircuitSimulator() {
       {builderOpen && (
         <ExerciseBuilderModal
           circuit={circuit}
+          draft={builderDraft}
+          setDraft={setBuilderDraft}
           computeOutputs={computeExerciseOutputs}
+          onImportPreset={importExercisePreset}
           onClose={() => setBuilderOpen(false)}
         />
       )}

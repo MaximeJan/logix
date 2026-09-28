@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent } from 'react';
+import { MAX_SCALE, MIN_SCALE } from '../lib/viewport';
 
 export interface ViewBox {
   x: number;
@@ -63,8 +64,8 @@ export function useViewport() {
     const p = getSvgPoint(e);
     const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
     const base = viewBoxBaseRef.current;
-    const minW = base ? base.w / 8 : 100; // zoom in max 8x
-    const maxW = base ? base.w * 4 : 8000; // zoom out max 4x
+    const minW = base ? base.w / MAX_SCALE : 100; // zoom in max 8x
+    const maxW = base ? base.w / MIN_SCALE : 8000; // zoom out max 4x
     const newW = Math.max(minW, Math.min(maxW, vb.w * factor));
     const newH = newW * (vb.h / vb.w);
     const newX = p.x - (p.x - vb.x) * (newW / vb.w);
@@ -114,6 +115,8 @@ export function useViewport() {
   return {
     svgRef,
     viewBox,
+    /** Applique une vue calculée ailleurs (cadrage en iframe, boutons de zoom). */
+    setView: setViewBox,
     viewBoxBaseRef,
     panRef,
     getSvgPoint,

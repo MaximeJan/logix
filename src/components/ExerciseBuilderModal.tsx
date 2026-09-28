@@ -1,9 +1,39 @@
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Link2, Check, Plus, Trash2, Wand2, Copy } from 'lucide-react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import {
+  Link2,
+  Check,
+  Plus,
+  Trash2,
+  Wand2,
+  Copy,
+  FolderOpen,
+  FilePlus,
+  ScanLine,
+  MonitorPlay,
+} from 'lucide-react';
 import { GATES } from '../gates';
 import { PALETTE_ORDER } from '../lib/constants';
-import { buildExerciseUrl, encodeExercise, MAX_PAYLOAD } from '../lib/exercise-url';
+import {
+  buildExerciseUrl,
+  decodeExercise,
+  encodeExercise,
+  exerciseStorageId,
+  parseExerciseLink,
+  MAX_PAYLOAD,
+} from '../lib/exercise-url';
+import {
+  EMPTY_DRAFT,
+  IFRAME_H_MAX,
+  IFRAME_H_MIN,
+  draftToExercise,
+  exerciseToDraft,
+  iframeHeightOf,
+  nextName,
+  portsFromCircuit,
+  type ExerciseDraft,
+} from '../lib/exercise-draft';
+import { usedCustomDefs } from '../lib/tab-import';
 import { serialize } from '../lib/persist';
 import { BusWidthControl } from './BusWidthControl';
 import type { Exercise, ExercisePort, IoRow } from '../domain/exercise';
@@ -15,116 +45,69 @@ const MONO = { fontFamily: "'IBM Plex Mono', monospace" } as const;
 // bascule sur une saisie ligne par ligne.
 const MAX_AUTO_BITS = 8;
 
-// Hauteur de l'iframe proposée dans l'extrait à coller (en pixels).
-const IFRAME_H_DEFAULT = 700;
-const IFRAME_H_MIN = 200;
-const IFRAME_H_MAX = 2000;
+// Zooms proposés pour l'iframe (en %). « Auto » (null) recadre le circuit.
+const ZOOM_CHOICES = [50, 60, 75, 90, 100];
 
-/** Mode de vérification choisi par l'enseignant. */
-type VerifyKind = 'tt' | 'seq' | 'none';
+type Msg = { kind: 'ok' | 'error' | 'info'; text: string } | null;
 
 interface ExerciseBuilderModalProps {
-  /** Circuit de l'onglet actif — sert au remplissage automatique des sorties. */
+  /** Circuit de l'onglet actif — préchargement et remplissage automatique des sorties. */
   circuit: Circuit;
+  /** Brouillon, tenu par l'orchestrateur : il survit à la fermeture de la modale. */
+  draft: ExerciseDraft;
+  setDraft: Dispatch<SetStateAction<ExerciseDraft>>;
   /** Simule le circuit sur les lignes du brouillon et renvoie les sorties obtenues. */
   computeOutputs: (draft: Exercise) => { rows: number[][] } | { error: string };
+  /**
+   * Ouvre le circuit préchargé d'un exercice importé dans le bac à sable (il
+   * devient le circuit courant). Renvoie une erreur, ou un avertissement.
+   */
+  onImportPreset: (preset: unknown, name: string) => { error?: string; notice?: string };
   onClose: () => void;
 }
 
-interface Draft {
-  title: string;
-  objective: string;
-  stepsText: string;
-  allowedTypes: string[];
-  inputs: ExercisePort[];
-  outputs: ExercisePort[];
-  verifyKind: VerifyKind;
-  rows: IoRow[];
-  autoOpenProperties: boolean;
-  /** Inclure le circuit courant comme point de départ (démo, scaffolding). */
-  includePreset: boolean;
-  /** Verrouiller le circuit : l'élève ne peut pas le modifier. */
-  locked: boolean;
-}
-
-const EMPTY: Draft = {
-  title: '',
-  objective: '',
-  stepsText: '',
-  allowedTypes: ['INPUT', 'OUTPUT'],
-  inputs: [{ name: 'A', width: 1 }],
-  outputs: [{ name: 'S', width: 1 }],
-  verifyKind: 'tt',
-  rows: [],
-  autoOpenProperties: false,
-  includePreset: false,
-  locked: false,
-};
-
 // Modale de création d'exercice : l'enseignant compose un énoncé, éventuellement
 // une table de vérité (ou une séquence), et récupère le lien partageable — tout
-// l'exercice tient dans l'URL, aucun backend n'est nécessaire.
+// l'exercice tient dans l'URL, aucun backend n'est nécessaire. Un exercice
+// existant se modifie en recollant son lien (« Modifier un exercice existant »).
 export function ExerciseBuilderModal({
   circuit,
+  draft,
+  setDraft,
   computeOutputs,
+  onImportPreset,
   onClose,
 }: ExerciseBuilderModalProps) {
-  const [draft, setDraft] = useState<Draft>(EMPTY);
   const [fillError, setFillError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  // Saisie libre pendant la frappe, bornée à la lecture (et normalisée au blur).
-  const [heightText, setHeightText] = useState(String(IFRAME_H_DEFAULT));
-  const iframeHeight = useMemo(() => {
-    const n = Math.floor(Number(heightText));
-    if (!Number.isFinite(n) || n <= 0) return IFRAME_H_DEFAULT;
-    return Math.min(IFRAME_H_MAX, Math.max(IFRAME_H_MIN, n));
-  }, [heightText]);
+  const [importText, setImportText] = useState('');
+  const [importMsg, setImportMsg] = useState<Msg>(null);
+  const [portsMsg, setPortsMsg] = useState<Msg>(null);
 
-  const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
+  const patch = (p: Partial<ExerciseDraft>) => setDraft((d) => ({ ...d, ...p }));
+  const dirty = JSON.stringify(draft) !== JSON.stringify(EMPTY_DRAFT);
+  const iframeHeight = iframeHeightOf(draft);
 
   const noVerify = draft.verifyKind === 'none';
   const totalInBits = draft.inputs.reduce((s, p) => s + p.width, 0);
   const canAutoGenerate =
     draft.verifyKind === 'tt' && totalInBits > 0 && totalInBits <= MAX_AUTO_BITS;
 
-  // Circuit courant sérialisé (composants, fils, définitions perso) : capturé une
-  // fois par ouverture de modale (le canevas est figé derrière la modale).
-  const presetData = useMemo(() => serialize(circuit), [circuit]);
+  // Circuit courant sérialisé (composants, fils, définitions perso utilisées).
+  // Le canevas est figé derrière la modale ; il ne change que si l'on importe
+  // un exercice (son circuit de départ devient l'onglet courant). Seules les
+  // définitions réellement utilisées sont embarquées, pour ne pas alourdir le
+  // lien de toute la bibliothèque de l'enseignant.
+  const presetData = useMemo(
+    () => ({
+      ...serialize(circuit),
+      customDefinitions: usedCustomDefs(circuit.components, circuit.customDefinitions ?? {}),
+    }),
+    [circuit],
+  );
   const presetCount = circuit.components.length;
 
-  const exercise = useMemo<Exercise | null>(() => {
-    const title = draft.title.trim();
-    if (!title) return null;
-    // Sans vérification, ni ports ni lignes ne sont obligatoires.
-    if (
-      !noVerify &&
-      (draft.inputs.length === 0 || draft.outputs.length === 0 || draft.rows.length === 0)
-    ) {
-      return null;
-    }
-    const steps = draft.stepsText
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return {
-      title,
-      objective: draft.objective.trim(),
-      steps,
-      allowedTypes: draft.allowedTypes,
-      inputs: draft.inputs,
-      outputs: draft.outputs,
-      verify: noVerify
-        ? { type: 'none' }
-        : draft.verifyKind === 'seq'
-          ? { type: 'sequence', steps: draft.rows }
-          : { type: 'truthtable' },
-      ...(draft.verifyKind === 'tt' ? { truthTable: draft.rows } : {}),
-      autoOpenProperties: draft.autoOpenProperties,
-      locked: draft.locked,
-      // Verrouiller implique de fournir un circuit (sinon rien à montrer).
-      ...(draft.includePreset || draft.locked ? { preset: presetData } : {}),
-    };
-  }, [draft, noVerify, presetData]);
+  const exercise = useMemo(() => draftToExercise(draft, presetData), [draft, presetData]);
 
   const urls = useMemo(() => {
     if (!exercise) return null;
@@ -137,8 +120,56 @@ export function ExerciseBuilderModal({
     return {
       plain,
       iframe: `<iframe src="${embedded}" width="100%" height="${iframeHeight}" style="border:0"></iframe>`,
+      // Liens de test : sauvegarde propre à cette version (voir TEST_PARAM).
+      test: buildExerciseUrl(exercise, { test: true }),
+      testEmbed: buildExerciseUrl(exercise, { embed: true, test: true }),
     };
   }, [exercise, iframeHeight]);
+
+  // -------- modifier un exercice existant --------
+  const importLink = () => {
+    setImportMsg(null);
+    const parsed = parseExerciseLink(importText);
+    const ex = parsed && decodeExercise(parsed.payload, { isKnownType: (t) => !!GATES[t] });
+    if (!parsed || !ex) {
+      setImportMsg({
+        kind: 'error',
+        text: "Ce texte ne contient pas d'exercice Logix lisible. Colle le lien complet ou l'extrait <iframe>.",
+      });
+      return;
+    }
+    if (dirty && !window.confirm('Remplacer le brouillon en cours par cet exercice ?')) return;
+    let notice = '';
+    if (ex.preset !== undefined) {
+      const res = onImportPreset(ex.preset, ex.title);
+      if (res.error) {
+        setImportMsg({ kind: 'error', text: res.error });
+        return;
+      }
+      notice = res.notice ? ` ${res.notice}` : '';
+    }
+    setDraft(exerciseToDraft(ex, exerciseStorageId(ex, parsed.payload), parsed.height));
+    setImportText('');
+    setPortsMsg(null);
+    setFillError(null);
+    setImportMsg({
+      kind: 'ok',
+      text:
+        `« ${ex.title} » est chargé.` +
+        (ex.preset !== undefined
+          ? ' Son circuit de départ est ouvert dans l’onglet courant : retouche-le si besoin, puis rouvre cette fenêtre.'
+          : '') +
+        notice,
+    });
+  };
+
+  const startNew = () => {
+    if (dirty && !window.confirm('Effacer le brouillon et commencer un nouvel exercice ?')) return;
+    setDraft(EMPTY_DRAFT);
+    setImportMsg(null);
+    setPortsMsg(null);
+    setFillError(null);
+  };
 
   // -------- édition des ports --------
   const setPort = (kind: 'inputs' | 'outputs', i: number, p: Partial<ExercisePort>) =>
@@ -160,6 +191,27 @@ export function ExerciseBuilderModal({
 
   const removePort = (kind: 'inputs' | 'outputs', i: number) =>
     setDraft((d) => ({ ...d, [kind]: d[kind].filter((_, j) => j !== i), rows: [] }));
+
+  const circuitHasIo = circuit.components.some((c) => c.type === 'INPUT' || c.type === 'OUTPUT');
+  const deducePorts = () => {
+    const { inputs, outputs, unlabeled } = portsFromCircuit(circuit.components);
+    setDraft((d) => {
+      // Mêmes ports qu'avant : on garde la table déjà saisie.
+      const same = JSON.stringify([inputs, outputs]) === JSON.stringify([d.inputs, d.outputs]);
+      return { ...d, inputs, outputs, rows: same ? d.rows : [] };
+    });
+    setPortsMsg(
+      unlabeled > 0
+        ? {
+            kind: 'info',
+            text: `${unlabeled} Entrée/Sortie sans étiquette dans le circuit : un nom leur a été proposé (modifiable ci-dessous).`,
+          }
+        : {
+            kind: 'ok',
+            text: `${inputs.length} entrée(s) et ${outputs.length} sortie(s) reprises du circuit.`,
+          },
+    );
+  };
 
   // -------- édition des lignes --------
   const generateRows = () =>
@@ -220,6 +272,20 @@ export function ExerciseBuilderModal({
     }
   };
 
+  // Aperçu fidèle de l'iframe : une petite page jetable qui embarque l'exercice
+  // à la hauteur choisie, comme le fera le site de l'enseignant.
+  const openIframePreview = (src: string) => {
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Aperçu — ${escapeHtml(
+      exercise?.title ?? '',
+    )}</title><style>body{margin:0;padding:24px;background:#f5f5f4;font-family:system-ui,sans-serif}main{max-width:960px;margin:0 auto}p{color:#57534e;font-size:13px;margin:0 0 8px}</style></head><body><main><p>Aperçu de l'iframe (${iframeHeight} px de haut), telle que l'élève la verra dans ta page.</p><iframe src="${escapeHtml(
+      src,
+    )}" width="100%" height="${iframeHeight}" style="border:0;background:#fff"></iframe></main></body></html>`;
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const opened = window.open(url, '_blank');
+    if (opened) opened.opener = null;
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
   return (
     <div
       className="absolute inset-0 bg-black/40 flex items-center justify-center z-50"
@@ -231,10 +297,56 @@ export function ExerciseBuilderModal({
       >
         <div className="px-5 py-4 border-b border-stone-200 flex items-center gap-2">
           <Link2 size={18} className="text-blue-600" />
-          <h2 className="text-base font-medium">Créer un exercice partageable</h2>
+          <h2 className="text-base font-medium flex-1">
+            {draft.sourceId ? 'Modifier un exercice' : 'Créer un exercice partageable'}
+          </h2>
+          {dirty && (
+            <button
+              onClick={startNew}
+              className="px-2.5 py-1 rounded border border-stone-300 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center gap-1.5"
+              title="Effacer le brouillon et repartir d'un exercice vierge"
+            >
+              <FilePlus size={12} />
+              Nouvel exercice
+            </button>
+          )}
         </div>
 
         <div className="px-5 py-4 space-y-5">
+          {/* ---- Modifier un exercice existant ---- */}
+          <div className="rounded border border-stone-200 bg-stone-50 px-3 py-2.5 space-y-1.5">
+            <div className="text-xs font-medium text-stone-600">Modifier un exercice existant</div>
+            <div className="flex items-stretch gap-1.5">
+              <input
+                type="text"
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') importLink();
+                }}
+                placeholder="Colle ici le lien de l'exercice ou son extrait <iframe>"
+                className="flex-1 min-w-0 px-2 py-1 border border-stone-300 rounded text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                style={MONO}
+              />
+              <button
+                onClick={importLink}
+                disabled={!importText.trim()}
+                className="px-2.5 rounded border border-stone-300 bg-white text-xs font-medium text-stone-700 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                <FolderOpen size={12} />
+                Charger
+              </button>
+            </div>
+            {importMsg ? (
+              <MsgLine msg={importMsg} />
+            ) : (
+              <div className="text-[11px] text-stone-500">
+                Le formulaire se pré-remplit et le circuit de départ s'ouvre dans un onglet. Tu
+                obtiens ensuite un nouveau lien à mettre à la place de l'ancien.
+              </div>
+            )}
+          </div>
+
           {/* ---- Énoncé ---- */}
           <div className="space-y-3">
             <Field label="Titre">
@@ -328,42 +440,56 @@ export function ExerciseBuilderModal({
               {presetCount === 0 && (draft.includePreset || draft.locked) && (
                 <div className="text-[11px] text-amber-700">
                   L'onglet courant est vide : construis d'abord le circuit à fournir, puis rouvre
-                  cette fenêtre.
+                  cette fenêtre (ton brouillon est conservé).
                 </div>
               )}
             </div>
           </Field>
 
           {/* ---- Ports ---- */}
-          <div className="grid grid-cols-2 gap-4">
-            <PortList
-              title="Entrées"
-              ports={draft.inputs}
-              onChange={(i, p) => setPort('inputs', i, p)}
-              onAdd={() => addPort('inputs')}
-              onRemove={(i) => removePort('inputs', i)}
-            />
-            <PortList
-              title="Sorties"
-              ports={draft.outputs}
-              onChange={(i, p) => setPort('outputs', i, p)}
-              onAdd={() => addPort('outputs')}
-              onRemove={(i) => removePort('outputs', i)}
-            />
-          </div>
-          <div className="text-[11px] text-stone-500 -mt-3">
-            {noVerify ? (
-              <>
-                Sans vérification, les ports ne servent que d'indication dans la consigne.
-                Retire-les tous si tu n'en veux aucune.
-              </>
-            ) : (
-              <>
-                La vérification apparie les Entrée/Sortie <strong>par étiquette</strong> : en mode
-                exercice, Logix nomme automatiquement les ports déposés (A, B… / S, T…), donc
-                l'ordre de placement de l'élève n'a aucune importance.
-              </>
-            )}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-end">
+              <button
+                onClick={deducePorts}
+                disabled={!circuitHasIo}
+                className="px-2.5 py-1 rounded border border-stone-300 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                title="Reprend les étiquettes et largeurs des Entrée/Sortie de l'onglet courant"
+              >
+                <ScanLine size={12} />
+                Déduire des Entrée/Sortie du circuit
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <PortList
+                title="Entrées"
+                ports={draft.inputs}
+                onChange={(i, p) => setPort('inputs', i, p)}
+                onAdd={() => addPort('inputs')}
+                onRemove={(i) => removePort('inputs', i)}
+              />
+              <PortList
+                title="Sorties"
+                ports={draft.outputs}
+                onChange={(i, p) => setPort('outputs', i, p)}
+                onAdd={() => addPort('outputs')}
+                onRemove={(i) => removePort('outputs', i)}
+              />
+            </div>
+            {portsMsg && <MsgLine msg={portsMsg} />}
+            <div className="text-[11px] text-stone-500">
+              {noVerify ? (
+                <>
+                  Sans vérification, les ports ne servent que d'indication dans la consigne.
+                  Retire-les tous si tu n'en veux aucune.
+                </>
+              ) : (
+                <>
+                  La vérification apparie les Entrée/Sortie <strong>par étiquette</strong> : en mode
+                  exercice, Logix nomme automatiquement les ports déposés (A, B… / S, T…), donc
+                  l'ordre de placement de l'élève n'a aucune importance.
+                </>
+              )}
+            </div>
           </div>
 
           {/* ---- Vérification ---- */}
@@ -509,6 +635,25 @@ export function ExerciseBuilderModal({
 
           {/* ---- Résultat ---- */}
           <div className="pt-3 border-t border-stone-200 space-y-2">
+            {draft.sourceId && (
+              <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
+                <label className="flex items-center gap-1.5 text-xs text-stone-800 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={draft.keepProgress}
+                    onChange={(e) => patch({ keepProgress: e.target.checked })}
+                  />
+                  Conserver le travail déjà commencé par les élèves
+                </label>
+                <div className="text-[11px] text-stone-600 leading-snug">
+                  {draft.keepProgress
+                    ? "Un élève qui avait commencé l'ancienne version retrouve son circuit sur le nouveau lien. Décoche si tu as changé le circuit de départ : l'élève garderait sinon l'ancien."
+                    : "Le nouveau lien repart d'une sauvegarde neuve : chaque élève redémarre sur le circuit de départ actuel."}{' '}
+                  Dans les deux cas, le lien change : remplace l'ancien (ou l'iframe) sur ta page.
+                </div>
+              </div>
+            )}
+
             {!urls ? (
               <div className="text-xs text-stone-500">
                 {noVerify
@@ -528,7 +673,7 @@ export function ExerciseBuilderModal({
                   copied={copied === 'plain'}
                   onCopy={() => copy(urls.plain, 'plain')}
                 />
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1">
                   <label className="text-[11px] font-medium text-stone-500">
                     Hauteur de l'iframe
                   </label>
@@ -537,15 +682,36 @@ export function ExerciseBuilderModal({
                     min={IFRAME_H_MIN}
                     max={IFRAME_H_MAX}
                     step={10}
-                    value={heightText}
-                    onChange={(e) => setHeightText(e.target.value)}
-                    onBlur={() => setHeightText(String(iframeHeight))}
+                    value={draft.iframeHeight}
+                    onChange={(e) => patch({ iframeHeight: e.target.value })}
+                    onBlur={() => patch({ iframeHeight: String(iframeHeight) })}
                     className="w-20 px-2 py-1 border border-stone-300 rounded text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-300"
                     style={MONO}
                   />
                   <span className="text-[11px] text-stone-400">
                     px (de {IFRAME_H_MIN} à {IFRAME_H_MAX})
                   </span>
+                  <label className="ml-3 text-[11px] font-medium text-stone-500">
+                    Zoom initial
+                  </label>
+                  <select
+                    value={draft.zoom ?? 'auto'}
+                    onChange={(e) =>
+                      patch({ zoom: e.target.value === 'auto' ? null : Number(e.target.value) })
+                    }
+                    className="px-1.5 py-1 border border-stone-300 rounded text-[11px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    title="Taille des composants dans l'iframe. Auto : le circuit de départ est recadré pour tenir dans la vue."
+                  >
+                    <option value="auto">Auto (recadrer)</option>
+                    {/* Un zoom importé hors liste reste sélectionnable. */}
+                    {[...new Set([...ZOOM_CHOICES, ...(draft.zoom ? [draft.zoom] : [])])]
+                      .sort((a, b) => a - b)
+                      .map((z) => (
+                        <option key={z} value={z}>
+                          {z} %
+                        </option>
+                      ))}
+                  </select>
                 </div>
                 <UrlRow
                   label="<iframe>"
@@ -553,20 +719,37 @@ export function ExerciseBuilderModal({
                   copied={copied === 'iframe'}
                   onCopy={() => copy(urls.iframe, 'iframe')}
                 />
-                <a
-                  href={urls.plain}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block text-xs text-blue-700 hover:underline"
-                >
-                  Tester dans un nouvel onglet ↗
-                </a>
+                <div className="flex items-center gap-4">
+                  <a
+                    href={urls.test}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block text-xs text-blue-700 hover:underline"
+                  >
+                    Tester dans un nouvel onglet ↗
+                  </a>
+                  <button
+                    onClick={() => openIframePreview(urls.testEmbed)}
+                    className="text-xs text-blue-700 hover:underline flex items-center gap-1"
+                    title="Ouvre une page d'aperçu avec l'iframe à la hauteur choisie"
+                  >
+                    <MonitorPlay size={12} />
+                    Tester en iframe ↗
+                  </button>
+                </div>
+                <div className="text-[11px] text-stone-400">
+                  Les tests ont leur propre sauvegarde : ils ne se mélangent pas au travail des
+                  élèves, et chaque nouvelle version repart du circuit de départ.
+                </div>
               </>
             )}
           </div>
         </div>
 
-        <div className="px-5 py-3 border-t border-stone-200 flex justify-end gap-2">
+        <div className="px-5 py-3 border-t border-stone-200 flex items-center justify-end gap-3">
+          <span className="text-[11px] text-stone-400 mr-auto">
+            Le brouillon est conservé si tu fermes cette fenêtre (jusqu'au rechargement de la page).
+          </span>
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1.5"
@@ -581,6 +764,19 @@ export function ExerciseBuilderModal({
 }
 
 // ------------------------------------------------------------------ petits blocs
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function MsgLine({ msg }: { msg: NonNullable<Msg> }) {
+  const color =
+    msg.kind === 'error'
+      ? 'text-rose-700'
+      : msg.kind === 'ok'
+        ? 'text-green-700'
+        : 'text-amber-700';
+  return <div className={`text-[11px] leading-snug ${color}`}>{msg.text}</div>;
+}
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -721,14 +917,4 @@ function UrlRow({
       </div>
     </div>
   );
-}
-
-// Propose A, B, C… (ou S, T, U… pour les sorties) en évitant les doublons.
-function nextName(existing: ExercisePort[], start = 'A'): string {
-  const base = start.charCodeAt(0);
-  for (let i = 0; i < 26; i++) {
-    const name = String.fromCharCode(base + i);
-    if (!existing.some((p) => p.name === name)) return name;
-  }
-  return `P${existing.length + 1}`;
 }
