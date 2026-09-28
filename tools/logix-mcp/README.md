@@ -36,6 +36,9 @@ node cli.mjs --circuit circ.json
 
 # Remplit une table de vérité en simulant un circuit-solution
 node cli.mjs --fill solution.json
+
+# Relit un exercice existant (lien, <iframe> ou payload) → { spec } à modifier
+node cli.mjs --read "https://maximejan.github.io/logix/?ex=…"
 ```
 
 ## Serveur MCP (pour Claude Code)
@@ -54,18 +57,36 @@ Dans le **dossier du cours** (`t-doc/janm`), crée `.mcp.json` :
 ```
 
 Relance Claude Code dans ce dossier : il voit alors les outils `build_exercise`,
-`build_circuit`, `fill_truth_table`, `list_components` et fabrique les liens tout seul.
+`read_exercise`, `build_circuit`, `fill_truth_table`, `list_components` et fabrique les liens
+tout seul.
 
 Test de fumée du serveur : `node smoke.mjs`.
 
-## Les quatre outils
+## Les cinq outils
 
 | Outil | Rôle |
 | --- | --- |
 | `build_exercise` | Spec d'exercice → `{ url, embedUrl, iframe, tooLong }`. Accepte un `circuit` (démo/départ). |
+| `read_exercise` | Lien / `<iframe>` existant → `{ spec }` au format de `build_exercise`, pour le **modifier**. |
 | `build_circuit` | Description haut niveau → `preset` **validé** (types, ports, largeurs, placement auto). |
 | `fill_truth_table` | Circuit-solution → table de vérité aux **bonnes** réponses (= bouton « Remplir depuis le circuit courant »). |
 | `list_components` | Composants dispo (type, libellé, catégorie, ports). |
+
+## Modifier un exercice existant
+
+Même principe que « Modifier un exercice existant » dans l'app :
+
+1. `read_exercise({ link })` avec le lien ou l'extrait `<iframe>` déjà présent dans le cours.
+   Il renvoie un `spec` complet : titre, étapes, ports, `rows`, `preset` (circuit de départ),
+   `zoom`, `iframeHeight`, `baseUrl` et `id`.
+2. Retouche ce `spec` (corrige l'énoncé, ajoute une ligne…).
+3. Repasse-le à `build_exercise` : tu obtiens un **nouveau lien**, qui remplace l'ancien dans le
+   cours (tout l'exercice est dans l'URL, le lien change forcément).
+
+`id` est l'identifiant de sauvegarde de l'exercice. **Le garder** permet aux élèves de retrouver
+le travail commencé sur l'ancien lien (cas normal : correction d'énoncé ou de table). **Le
+retirer** donne une sauvegarde neuve : à faire si le circuit de départ a changé, sinon un élève
+qui avait déjà commencé garderait l'ancien circuit.
 
 ## Circuits préfaits (démos, points de départ) — la partie délicate
 
@@ -126,7 +147,9 @@ colonnes (gauche→droite), et renvoie `{ preset, warnings }`. Ce `preset` se pa
   "circuit": { "components": [], "wires": [] }, // circuit préfait (voir plus haut) — préféré
   "preset": { "version": 2, "components": [], "wires": [], "customDefinitions": {} }, // bas niveau
   "baseUrl": "https://maximejan.github.io/logix/", // défaut
-  "iframeHeight": 700
+  "iframeHeight": 700,
+  "zoom": 75,                            // zoom initial dans l'iframe, en % (25–200) ; omis = auto
+  "id": "k3x9"                           // identifiant de sauvegarde (voir read_exercise) ; omis = neuf
 }
 ```
 
@@ -135,6 +158,7 @@ colonnes (gauche→droite), et renvoie `{ preset, warnings }`. Ce `preset` se pa
 - `circuit` sans `locked` = point de départ à compléter ; avec `locked` = démonstration.
 - `preset` = alternative bas niveau (déjà sérialisé) ; préfère `circuit`. Si les deux, `preset` gagne.
 - Si le lien dépasse le plafond (`tooLong:true`), allège le circuit.
+- `zoom` omis → l'iframe recadre le circuit de départ pour qu'il tienne dans la vue (75 % au plus).
 
 > **Base URL** : en Node il n'y a pas de navigateur, donc le lien pointe par défaut vers le
 > déploiement GitHub Pages `https://maximejan.github.io/logix/`. Change `baseUrl` si tu sers Logix

@@ -7,10 +7,17 @@
 //   node cli.mjs --components         # liste les composants disponibles
 //   node cli.mjs --circuit circ.json  # valide/construit un circuit -> { preset }
 //   node cli.mjs --fill circuit.json  # remplit une table depuis un circuit-solution
+//   node cli.mjs --read "<lien>"      # relit un exercice existant -> { spec } à modifier
 //
 // Aucune dépendance à installer : s'appuie sur core.mjs (déjà bundlé).
 import { readFile } from 'node:fs/promises';
-import { buildExercise, buildCircuit, fillTruthTable, listComponents } from './logix.mjs';
+import {
+  buildExercise,
+  buildCircuit,
+  fillTruthTable,
+  listComponents,
+  readExercise,
+} from './logix.mjs';
 
 async function readInput(pathArg) {
   if (pathArg) return readFile(pathArg, 'utf8');
@@ -31,6 +38,9 @@ try {
   } else if (flag === '--fill') {
     const spec = JSON.parse(await readInput(arg));
     out(fillTruthTable(spec));
+  } else if (flag === '--read') {
+    // Le lien se passe directement en argument (entre guillemets), ou sur stdin.
+    out(readExercise({ link: arg ?? (await readInput()) }));
   } else {
     const pathArg = flag && !flag.startsWith('--') ? flag : undefined;
     const spec = JSON.parse(await readInput(pathArg));

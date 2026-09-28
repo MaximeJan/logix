@@ -58,7 +58,13 @@ const tools = await rpc('tools/list', {});
 const names = (tools.result?.tools ?? []).map((t) => t.name).sort();
 ok(
   JSON.stringify(names) ===
-    JSON.stringify(['build_circuit', 'build_exercise', 'fill_truth_table', 'list_components']),
+    JSON.stringify([
+      'build_circuit',
+      'build_exercise',
+      'fill_truth_table',
+      'list_components',
+      'read_exercise',
+    ]),
   'tools/list → ' + names.join(', '),
 );
 
@@ -106,6 +112,55 @@ ok(
   builtText.includes('https://maximejan.github.io/logix/?ex=') && !built.result?.isError,
   'build_exercise → lien Pages',
 );
+
+// Modifier un exercice : build → read → retouche → build, en gardant l'id.
+const original = await rpc('tools/call', {
+  name: 'build_exercise',
+  arguments: {
+    title: 'NOT maison',
+    allowedTypes: ['INPUT', 'OUTPUT', 'NAND'],
+    inputs: [{ name: 'A' }],
+    outputs: [{ name: 'S' }],
+    rows: [
+      [[0], [1]],
+      [[1], [0]],
+    ],
+    zoom: 60,
+    circuit: { components: [{ id: 'A', type: 'INPUT' }], wires: [] },
+    iframeHeight: 540,
+  },
+});
+const originalJson = JSON.parse(original.result?.content?.[0]?.text ?? '{}');
+const read = await rpc('tools/call', {
+  name: 'read_exercise',
+  arguments: { link: originalJson.iframe },
+});
+const { spec } = JSON.parse(read.result?.content?.[0]?.text ?? '{}');
+ok(
+  spec?.title === 'NOT maison' &&
+    spec.zoom === 60 &&
+    spec.iframeHeight === 540 &&
+    spec.rows?.length === 2 &&
+    spec.preset?.components?.length === 1 &&
+    spec.baseUrl === 'https://maximejan.github.io/logix/' &&
+    /^[0-9a-z]+$/.test(spec.id ?? ''),
+  'read_exercise → spec complet (zoom, hauteur, preset, id)',
+);
+const edited = await rpc('tools/call', {
+  name: 'build_exercise',
+  arguments: { ...spec, title: 'NOT maison (v2)' },
+});
+const reread = await rpc('tools/call', {
+  name: 'read_exercise',
+  arguments: { link: JSON.parse(edited.result?.content?.[0]?.text ?? '{}').url },
+});
+const spec2 = JSON.parse(reread.result?.content?.[0]?.text ?? '{}').spec;
+ok(
+  spec2?.title === 'NOT maison (v2)' && spec2.id === spec.id,
+  'build_exercise(id) → même identifiant de sauvegarde après modification',
+);
+const badRead = await rpc('tools/call', { name: 'read_exercise', arguments: { link: 'coucou !' } });
+ok(badRead.result?.isError === true, 'read_exercise → erreur claire sur un lien illisible');
 
 const comps = await rpc('tools/call', { name: 'list_components', arguments: {} });
 ok((comps.result?.content?.[0]?.text ?? '').includes('FULLADDER'), 'list_components → contient FULLADDER');

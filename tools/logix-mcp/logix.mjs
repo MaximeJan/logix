@@ -6,7 +6,12 @@
 // repo) — ici on ne fait qu'emballer et parer aux entrées mal formées.
 import {
   encodeExercise,
+  decodeExercise,
+  parseExerciseLink,
+  exerciseStorageId,
   MAX_PAYLOAD,
+  ZOOM_MIN,
+  ZOOM_MAX,
   verifyExercise,
   getDef,
   GATES,
@@ -249,6 +254,21 @@ function assembleExercise(spec = {}) {
   };
   if (verify === 'truthtable') ex.truthTable = rows;
   if (spec.preset && typeof spec.preset === 'object') ex.preset = spec.preset;
+  // Zoom initial en iframe (%) ; absent = auto (recadrage du circuit).
+  if (spec.zoom != null) {
+    const z = Math.round(Number(spec.zoom));
+    if (!Number.isFinite(z)) throw new Error('« zoom » doit être un nombre (en %).');
+    ex.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+  }
+  // Identifiant stable : garder celui d'un exercice existant (voir read_exercise)
+  // pour que les élèves retrouvent leur travail sur le nouveau lien.
+  if (spec.id != null && spec.id !== '') {
+    const id = String(spec.id);
+    if (!/^[a-z0-9]{1,16}$/i.test(id)) {
+      throw new Error('« id » doit être court et alphanumérique (1 à 16 caractères).');
+    }
+    ex.id = id;
+  }
   return ex;
 }
 
@@ -292,6 +312,48 @@ export function buildExercise(spec = {}) {
   const iframe = `<iframe src="${embedUrl}" width="100%" height="${height}" style="border:0"></iframe>`;
 
   return { url, embedUrl, iframe, payloadLength: payload.length, maxPayload: MAX_PAYLOAD, tooLong };
+}
+
+/**
+ * Relit un exercice existant pour le modifier (équivalent de « Modifier un
+ * exercice existant » dans l'app). Accepte le lien, l'extrait <iframe> ou le
+ * payload nu. Renvoie un `spec` au format de build_exercise, prêt à être retouché
+ * puis repassé tel quel :
+ *  - `spec.id` = identifiant de sauvegarde de l'exercice : le garder permet aux
+ *    élèves de retrouver leur travail sur le nouveau lien ; le retirer donne une
+ *    sauvegarde neuve (à faire si le circuit de départ change) ;
+ *  - `spec.preset` = circuit de départ déjà sérialisé (s'il y en a un) ;
+ *  - `spec.iframeHeight` = hauteur trouvée dans l'extrait <iframe>, le cas échéant.
+ */
+export function readExercise({ link } = {}) {
+  const parsed = parseExerciseLink(String(link ?? ''));
+  const ex = parsed && decodeExercise(parsed.payload, { isKnownType: (t) => !!GATES[t] });
+  if (!parsed || !ex) {
+    throw new Error(
+      "Aucun exercice Logix lisible : passe le lien complet, l'<iframe> ou le payload.",
+    );
+  }
+  const v = ex.verify;
+  const spec = {
+    title: ex.title,
+    objective: ex.objective,
+    steps: ex.steps,
+    allowedTypes: ex.allowedTypes,
+    inputs: ex.inputs,
+    outputs: ex.outputs,
+    verify: v.type,
+    rows: v.type === 'sequence' ? v.steps : v.type === 'truthtable' ? (ex.truthTable ?? []) : [],
+    locked: ex.locked,
+    autoOpenProperties: ex.autoOpenProperties,
+    ...(ex.zoom !== undefined ? { zoom: ex.zoom } : {}),
+    ...(ex.preset !== undefined ? { preset: ex.preset } : {}),
+    id: exerciseStorageId(ex, parsed.payload),
+    ...(parsed.height !== undefined ? { iframeHeight: parsed.height } : {}),
+  };
+  // Base URL d'origine (tout ce qui précède « ?ex= »), pour régénérer au même endroit.
+  const base = /(https?:\/\/[^\s"'?]+)\?/.exec(String(link))?.[1];
+  if (base) spec.baseUrl = base;
+  return { spec };
 }
 
 // Répartit un entier `n` sur des entrées de largeurs données (1re entrée en tête),
