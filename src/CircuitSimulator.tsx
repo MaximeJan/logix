@@ -1416,7 +1416,7 @@ export default function CircuitSimulator() {
         }
         hasManualClock={circuit.components.some((c) => c.type === 'CLOCK' && !c.state?.running)}
         onTick={tickClocks}
-        hasCycle={sim.hasCycle}
+        unstable={sim.unstable}
         busConflict={sim.busConflicts.length > 0}
         wireWidthMismatch={wireWidthMismatch}
       />

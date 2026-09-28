@@ -157,6 +157,11 @@ export interface SimResult {
   wireValues: Map<string, number>;
   inputValues: Map<string, number>;
   hasCycle: boolean;
+  /**
+   * Le circuit bouclé ne se stabilise pas (il oscille, ex. anneau d'inverseurs).
+   * Une boucle stable, comme une bascule SR en deux NOR, n'est PAS instable.
+   */
+  unstable: boolean;
   /** Ids des nœuds BUS où ≥2 sources sont actives en même temps (conflit). */
   busConflicts: string[];
 }

@@ -72,13 +72,35 @@ export function applyOrientation(
 // Tri topologique de Kahn sur le graphe des fils, puis évaluation. Toutes les
 // valeurs sont des entiers (les bus sont des Number masqués à `width` bits).
 //
-// `prevOutValues` (optionnel) porte les `outValues` du dernier appel : c'est ce
-// qui donne une vraie mémoire à un feedback combinatoire (ex. porte OR dont la
-// sortie revient sur une entrée). Dans un graphe acyclique, la source d'un fil
-// est TOUJOURS évaluée avant sa cible (ordre topologique) : ce paramètre n'a
-// donc aucun effet sur les circuits existants — il ne sert que de secours pour
-// une sortie pas encore résolue dans CETTE passe, c'est-à-dire un fil qui fait
-// partie d'un cycle.
+// Circuits bouclés (bascule SR en deux NOR, porte OR rebouclée…) : les
+// composants que Kahn ne peut pas ordonner — ceux d'une boucle et tout ce qui
+// en dépend — sont ré-évalués jusqu'à STABILISATION (point fixe). Une seule
+// passe ne suffit pas : la première porte d'une boucle lirait l'ancienne valeur
+// de l'autre, et une bascule afficherait Q = Q̄ = 0 au lieu de basculer (ou ne
+// basculerait qu'au relâchement de S, selon l'ordre de pose des portes). Un
+// circuit qui ne se stabilise jamais (anneau d'inverseurs) est signalé par
+// `unstable`.
+//
+// `prevOutValues` (optionnel) porte les `outValues` du dernier appel : c'est le
+// point de départ de la stabilisation, donc la MÉMOIRE d'un circuit bouclé
+// (sans lui, une bascule repartirait de zéro à chaque appel). Dans un graphe
+// acyclique, la source d'un fil est TOUJOURS évaluée avant sa cible : ce
+// paramètre n'a alors aucun effet.
+//
+// Composants personnalisés : la mémoire de leur circuit interne est rangée dans
+// `outValues` sous des clés préfixées `idDuComposant/…` (l'UI ne lit que des
+// clés `id:port`), et rendue au sous-circuit à l'appel suivant — une bascule
+// encapsulée garde donc son état.
+
+/** Séparateur des clés de mémoire d'un sous-circuit (`idParent/id:port`). */
+const CHILD_SEP = '/';
+/** Plafond de passes pour stabiliser une boucle (un circuit stable en demande 2 ou 3). */
+const MAX_SWEEPS = 200;
+
+/** Le résultat d'une simulation porte-t-il une mémoire à conserver ? */
+const hasMemory = (r: SimResult): boolean =>
+  r.hasCycle || [...r.outValues.keys()].some((k) => k.includes(CHILD_SEP));
+
 export function simulate(
   circuit: Circuit,
   getDef: GetDef,
@@ -124,17 +146,55 @@ export function simulate(
     }
   }
   const hasCycle = order.length !== components.length;
+
+  // Partie bouclée (boucles + leur aval), en post-ordre inverse d'un parcours en
+  // profondeur : l'aval d'une boucle passe après elle, ce qui limite le nombre
+  // de passes nécessaires pour se stabiliser.
+  const looped: string[] = [];
   if (hasCycle) {
-    for (const c of components) if (!order.includes(c.id)) order.push(c.id);
+    const ordered = new Set(order);
+    const seen = new Set<string>();
+    const visit = (id: string) => {
+      if (seen.has(id) || ordered.has(id)) return;
+      seen.add(id);
+      for (const next of outgoing.get(id) ?? []) visit(next);
+      looped.push(id);
+    };
+    for (const c of components) visit(c.id);
+    looped.reverse();
   }
 
-  // Évaluation en ordre topologique
+  // Mémoire des sous-circuits (composants personnalisés) : celle du dernier
+  // appel, regroupée par composant parent à la première demande, et celle
+  // calculée pendant CET appel (prioritaire, pour le point fixe).
+  let prevChildMem: Map<string, Map<string, number>> | null = null;
+  const prevChildOf = (id: string): Map<string, number> | undefined => {
+    if (!prevChildMem) {
+      const grouped = new Map<string, Map<string, number>>();
+      for (const [k, v] of prevOutValues ?? []) {
+        const i = k.indexOf(CHILD_SEP);
+        if (i < 0) continue;
+        const parent = k.slice(0, i);
+        let m = grouped.get(parent);
+        if (!m) grouped.set(parent, (m = new Map()));
+        m.set(k.slice(i + 1), v);
+      }
+      prevChildMem = grouped;
+    }
+    return prevChildMem.get(id);
+  };
+  const childMem = new Map<string, Map<string, number>>();
+  const unstableChildren = new Set<string>();
+
   const outValues = new Map<string, number>();
-  const busConflicts: string[] = [];
-  for (const id of order) {
+  const busConflicts = new Set<string>();
+
+  // Évalue un composant et range ses sorties. Renvoie true si l'une d'elles a
+  // changé depuis sa dernière évaluation dans CET appel (sert au point fixe).
+  const evaluate = (id: string): boolean => {
     const comp = compMap.get(id)!;
     const def = getDef(comp.type, defs, comp);
-    if (!def) continue;
+    if (!def) return false;
 
     const inputVals = def.inputs.map((p) => {
       const wire = wireToInput.get(portKey(comp.id, p.name));
@@ -211,7 +271,8 @@ export function simulate(
         }
       }
       outVals = [active >= 1 ? maskTo(width, value) : 0];
-      if (active > 1) busConflicts.push(comp.id);
+      if (active > 1) busConflicts.add(comp.id);
+      else busConflicts.delete(comp.id);
     } else if (comp.type === 'ADDER') {
       // Additionneur combinatoire N-bit : S = (A + B + Cin) mod 2^width, Cout = retenue.
       const width = comp.state?.width ?? 4;
@@ -285,7 +346,16 @@ export function simulate(
         };
         const newStack = new Set(recursionStack);
         newStack.add(comp.type);
-        const childResult = simulate(childCircuit, getDef, defs, newStack);
+        const childResult = simulate(
+          childCircuit,
+          getDef,
+          defs,
+          newStack,
+          childMem.get(comp.id) ?? prevChildOf(comp.id),
+        );
+        if (hasMemory(childResult)) childMem.set(comp.id, childResult.outValues);
+        if (childResult.unstable) unstableChildren.add(comp.id);
+        else unstableChildren.delete(comp.id);
         outVals = def.outputs.map((p) =>
           asInt(childResult.inputValues.get(portKey(p.internalId ?? p.name, 'in0')) ?? 0),
         );
@@ -296,9 +366,33 @@ export function simulate(
       outVals = def.outputs.map(() => 0);
     }
 
+    let changed = false;
     def.outputs.forEach((p, i) => {
-      outValues.set(portKey(comp.id, p.name), asInt(outVals[i] ?? 0));
+      const key = portKey(comp.id, p.name);
+      const v = asInt(outVals[i] ?? 0);
+      if (outValues.get(key) !== v) changed = true;
+      outValues.set(key, v);
     });
+    return changed;
+  };
+
+  // Partie acyclique : une passe en ordre topologique suffit.
+  for (const id of order) evaluate(id);
+  // Partie bouclée : passes répétées jusqu'à ce que plus aucune sortie ne bouge.
+  let stable = true;
+  if (looped.length > 0) {
+    const maxSweeps = Math.min(MAX_SWEEPS, 2 * looped.length + 10);
+    stable = false;
+    for (let sweep = 0; sweep < maxSweeps && !stable; sweep++) {
+      stable = true;
+      for (const id of looped) if (evaluate(id)) stable = false;
+    }
+  }
+  const unstable = !stable || unstableChildren.size > 0;
+
+  // Mémoire des sous-circuits, sous des clés préfixées (voir plus haut).
+  for (const [id, mem] of childMem) {
+    for (const [k, v] of mem) outValues.set(`${id}${CHILD_SEP}${k}`, v);
   }
 
   // Valeurs sur les fils = valeur de la sortie source (fils valides seulement)
@@ -319,14 +413,26 @@ export function simulate(
     }
   }
 
-  return { outValues, wireValues, inputValues, hasCycle, busConflicts };
+  return {
+    outValues,
+    wireValues,
+    inputValues,
+    hasCycle,
+    unstable,
+    busConflicts: [...busConflicts],
+  };
 }
 
 // --------- Étape séquentielle ---------
 // Met à jour les composants à mémoire (DFF, REG, COUNTER, RAM, SRLATCH, LEDMATRIX)
 // à partir d'une simulation calculée AVANT cette étape — d'où l'atomicité.
-export function stepSequential(circuit: Circuit, getDef: GetDef): Circuit {
-  const sim = simulate(circuit, getDef);
+// `prevOutValues` : mémoire des circuits bouclés (voir simulate).
+export function stepSequential(
+  circuit: Circuit,
+  getDef: GetDef,
+  prevOutValues?: Map<string, number>,
+): Circuit {
+  const sim = simulate(circuit, getDef, null, new Set<string>(), prevOutValues);
   const newComponents = circuit.components.map((comp) => {
     if (comp.type === 'SRLATCH') {
       const sVal = asInt(sim.inputValues.get(portKey(comp.id, 'S'))) & 1;

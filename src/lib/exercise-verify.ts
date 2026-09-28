@@ -136,10 +136,15 @@ export function verifyExercise(
     ),
   };
   const allSteps: ExerciseRow[] = [];
+  // Mémoire des circuits bouclés (bascule SR en portes NOR/NAND…) transmise
+  // d'une ligne à la suivante, comme dans l'app : sans elle, une ligne
+  // « maintien » après un Reset repartirait de zéro et échouerait.
+  let memory: Map<string, number> | undefined;
   for (const [inVals, expectedOutVals] of exercise.verify.steps) {
     testCircuit = withInputs(testCircuit, inVals);
-    testCircuit = stepSequential(testCircuit, getDef);
-    const sim = simulate(testCircuit, getDef);
+    testCircuit = stepSequential(testCircuit, getDef, memory);
+    const sim = simulate(testCircuit, getDef, null, new Set(), memory);
+    memory = sim.outValues;
     const actualOutVals = readOutputs(sim, outputIds);
     const match = rowMatches(expectedOutVals, actualOutVals);
     allSteps.push({ inVals, expectedOutVals, actualOutVals, match });
