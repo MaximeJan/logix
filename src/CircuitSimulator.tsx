@@ -14,7 +14,8 @@ import { EMBED_PARAM } from './lib/exercise-url';
 import { circuitBounds, viewForBounds, zoomView, EMBED_DEFAULT_SCALE } from './lib/viewport';
 import { EMPTY_DRAFT, type ExerciseDraft } from './lib/exercise-draft';
 import { mergeImportedTab } from './lib/tab-import';
-import { GRID, INPUT_BUS_CELL_SIZE } from './lib/constants';
+import { GRID } from './lib/constants';
+import { bitRowLayout, bitAtPoint } from './gates/busLayout';
 import { GATES } from './gates';
 import {
   getDef,
@@ -1133,18 +1134,13 @@ export default function CircuitSimulator() {
       return;
     }
     // Bus : on détermine quel bit a été cliqué en fonction de la position locale.
+    // Dessin fixe (jamais tourné) : les coordonnées locales sont celles du
+    // dessin, quelle que soit l'orientation. Voir bitRowLayout.
     const local = toLocalPoint(e, comp);
     if (!local) return;
-    const localX = local.x;
-    const localY = local.y;
-    // La rangée de cellules occupe x ∈ [0, width*cellSize] et y ∈ [12, 46]
-    // (geom : h=52, cellY=12, cellH=34)
-    const cellSize = INPUT_BUS_CELL_SIZE;
-    if (localY < 12 || localY > 46) return;
-    if (localX < 0 || localX >= width * cellSize) return;
-    const visualIdx = Math.floor(localX / cellSize);
-    const bitIdx = width - 1 - visualIdx; // MSB à gauche
-    toggleInputBit(comp.id, bitIdx);
+    const L = bitRowLayout(width, comp.state?.orientation, 'out');
+    const bitIdx = bitAtPoint(L, width, local.x, local.y);
+    if (bitIdx !== null) toggleInputBit(comp.id, bitIdx);
   };
 
   const handlePortMouseDown = (

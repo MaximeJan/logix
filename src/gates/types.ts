@@ -8,6 +8,11 @@ export interface DynamicGeometry {
   h?: number;
   inputs: Port[];
   outputs: Port[];
+  /**
+   * Dessin fixe pour CET état (ex. Entrée multi-bits : les cases ne tournent
+   * pas, seul le port change de bord). Prioritaire sur `GateDef.fixedDisplay`.
+   */
+  fixedDisplay?: boolean;
 }
 
 /** Définition d'un composant primitif (UI + logique). */

@@ -51,6 +51,9 @@ src/
                            la dimension de la boîte, fournit le ▷ d'horloge.
     RectShape.tsx          rendu standardisé d'une boîte rectangulaire (cadre,
                            stubs, labels, ▷ CLK, halo) à partir d'un `RectLayout`.
+    busLayout.ts           dispositions fixes des composants bus : bitRowLayout
+                           (Entrée/Sortie multi-bits) + bitAtPoint, busNodeLayout
+                           (nœud BUS), edgeFor. Ports sur la grille de 10 px.
     UprightText.tsx        texte qui se contre-tourne (`-angle`) en pivotant
                            autour de son ancre (left/center/right).
     io / logic / bus /     défs par catégorie (Record<string, GateDef>)
@@ -70,7 +73,7 @@ src/
 tests/                     Vitest (.mjs) : sim-core (importe la VRAIE GATES),
                            geometry, bits, registry, custom-def, exercise-url,
                            exercise-verify, exercise-draft, tab-import, viewport,
-                           feedback (bascules en portes),
+                           feedback (bascules en portes), bus-layout,
                            run.test (logique + persist)
 ```
 
@@ -227,11 +230,11 @@ Ajuster** (`zoomView` / recadrage, cf. `exercise.zoom` ci-dessus).
 Le panneau gauche est l'un ou l'autre, sans bascule : `ExercisePanel` si l'URL portait un
 exercice, `PalettePanel` sinon.
 
-**Le rendu du canevas** (`components/CircuitCanvas.tsx`) dessine la grille, les fils, les composants et les ports ; c'est un composant présentationnel piloté par les props/handlers de l'orchestrateur. **Le rendu des fils bus** utilise `makeBusTracks(points, n, pitch)` qui appelle `offsetManhattan(points, offset)` pour chaque piste — les premiers/derniers sommets restent fixes, les pistes convergent en éventail aux ports.
+**Le rendu du canevas** (`components/CircuitCanvas.tsx`) dessine la grille, les fils, les composants et les ports ; c'est un composant présentationnel piloté par les props/handlers de l'orchestrateur. **Le rendu des fils bus** utilise `makeBusRibbon(points, n, pitch)` (`lib/geometry.ts`) : le tracé est d'abord simplifié (`simplifyPolyline` retire les coudes vides), puis N pistes **parallèles** sont décalées en onglet aux coins et ne convergent vers le port que sur les `taper` (6) derniers pixels, comme une nappe branchée sur un connecteur. L'épaisseur est plafonnée à 18 px (un bus 8 bits ne déborde plus sur le port voisin, espacé de 20 px) et réduite si le tracé est trop serré pour qu'aucune piste ne recule ; le trait suit le même rapport. L'ancien `makeBusTracks` (convergence sur tout le premier/dernier segment → « nœud papillon » au moindre décrochement) reste exporté mais n'est plus utilisé.
 
 ### Composants rectangulaires « à dessin fixe » (`fixedDisplay`)
 
-Pour les composants rectangulaires complexes (SR-latch, DFF, REG, COUNTER, RAM, ADDER, SEG7 **et les composants personnalisés**) qui contiennent un LCD/des libellés et qui ne supportent pas bien d'être réellement tournés, on utilise le modèle **`fixedDisplay: true`** :
+Pour les composants rectangulaires complexes (SR-latch, DFF, REG, COUNTER, RAM, ADDER, SEG7, **les composants bus** — BUS, DECODER, SPLITTER, MERGER, SLICE, Entrée/Sortie multi-bits — **et les composants personnalisés**) qui contiennent un LCD/des libellés et qui ne supportent pas bien d'être réellement tournés, on utilise le modèle **`fixedDisplay: true`** :
 
 1. La `shape` n'est **jamais** rotée par `CircuitCanvas` (angle 0). Le contenu reste droit, peu importe l'orientation.
 2. C'est `getDynamicGeometry(comp)` qui place les ports sur le **bord** correspondant à l'orientation (`right`→gauche/droite, `down`→haut/bas, etc.).
@@ -243,7 +246,12 @@ Pour les composants rectangulaires complexes (SR-latch, DFF, REG, COUNTER, RAM, 
    - `ports` : détails de rendu (px/py = connexion, sx/sy = bout de stub, lx/ly + anchor = label, edge L/R/T/B, clk).
 4. La `shape` instancie `<RectShape layout={L} halo={…}>` (`gates/RectShape.tsx`) qui dessine cadre + stubs + labels + ▷ CLK + halo, et glisse son contenu via `children` dans `L.content`.
 
-Constantes (`rectLayout.ts`) : `STUB=14, SPACING=24, EDGE_PAD=10, PORT_END_PAD=12, CLK_GAP=8`. Le label d'un port marqué `clk: true` est automatiquement décalé de `CLK_GAP` pour laisser passer le triangle ▷.
+Constantes (`rectLayout.ts`) : `STUB=14, SPACING=24, EDGE_PAD=10, PORT_END_PAD=12, CLK_GAP=8`. Le label d'un port marqué `clk: true` est automatiquement décalé de `CLK_GAP` pour laisser passer le triangle ▷. Options `spacing` et `grid` : les composants bus passent `{ spacing: 20, grid: 20 }` (dimensions arrondies → ports sur la grille de 10 px, comme les entrées des portes logiques) ; les autres boîtes gardent l'espacement historique de 24 px.
+
+**Composants bus** (`gates/bus.tsx`, `gates/busLayout.ts`) : tout le texte reste droit et DANS le cadre dans les 4 orientations, MSB en premier (en haut, ou à gauche quand les ports sont en haut/bas), ports tous les 20 px.
+- **Entrée/Sortie multi-bits** : `getDynamicGeometry` renvoie `fixedDisplay: true` quand `width > 1` (une Entrée 1 bit, symétrique, continue de pivoter). `bitRowLayout` garde les cases horizontales (40 px de haut, port à y = 20 comme en 1 bit) et place le port au milieu du bord choisi. Le clic sur un bit passe par `bitAtPoint` (coordonnées locales du dessin, jamais tournées). L'étiquette du composant est posée du côté **opposé** au port (`getPortFacing`).
+- **BUS** : `busNodeLayout` groupe chaque source en un couple de ports adjacents (`in{k}` puis `en{k}`, 20 px d'écart, ordre lu par `simulate`) encadré dans la boîte, surligné quand la source est active ; sortie au milieu du bord opposé.
+- **MUX / DEMUX** gardent un trapèze qui pivote (la forme porte le sens du flux) ; voies à `y = 30 + 20i`, `h = 20n + 40`, étiquettes via `UprightText`, « sel » placé selon l'orientation pour ne pas toucher le bord biseauté.
 
 Pour les composants qui ont des **labels qui doivent rester droits malgré la rotation** (sans passer par `fixedDisplay`), utiliser `<UprightText angle={angle} textAnchor=…>` qui se contre-tourne autour de son ancre.
 
@@ -282,7 +290,7 @@ Voir `ROADMAP.md` pour le détail. Très brièvement :
 - **`getDef(type, customDefs)` sans comp** renvoie la def avec le `defaultState`. OK pour les aperçus, **pas** pour la simulation/le rendu d'un composant réel. Toujours passer `comp` quand disponible.
 - **Les fils orphelins** après changement de largeur sont nettoyés par `updateComponent` via le flag `_dropMismatchedWires: true` dans le patch. Si tu ajoutes un composant à géométrie variable, pense à ce flag dans son sélecteur de largeur.
 - **L'éditeur de composant custom** entre en `editMode` et travaille sur un circuit séparé ; au commit il reconstruit la définition. Le banner ambré indique le mode édition. L'autosave est suspendu pendant l'édition.
-- **Le toggle 1-bit d'une INPUT** passe par `toggleInput`. Le clic sur un bit d'INPUT bus passe par `toggleInputBit(id, bitIdx)` ; la détection du bit cliqué est géométrique (position locale ÷ `INPUT_BUS_CELL_SIZE`).
+- **Le toggle 1-bit d'une INPUT** passe par `toggleInput`. Le clic sur un bit d'INPUT bus passe par `toggleInputBit(id, bitIdx)` ; le bit cliqué est trouvé par `bitAtPoint(bitRowLayout(…), …)` sur la position locale (l'Entrée bus est à dessin fixe, donc jamais tournée — `toLocalPoint` ne dé-tourne rien).
 - **Autosave et exercices-URL** : `useAutosave(..., storageKey)` charge ET écrit sur la clé qu'on
   lui passe. Si tu ajoutes une source de circuit au démarrage, souviens-toi que le chargement est
   asynchrone et écraserait ton état — passe par une clé dédiée plutôt que par un `useEffect` de

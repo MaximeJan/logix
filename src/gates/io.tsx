@@ -1,10 +1,45 @@
 // Définitions de composants — catégorie « io ». Agrégées dans ./index.
 import { asInt, maskTo } from '../lib/sim';
 import { uprightTransform } from '../lib/geometry';
-import { INPUT_BUS_CELL_SIZE } from '../lib/constants';
 import { bitCells } from './shared';
 import { UprightText } from './UprightText';
+import { bitRowLayout, type BitRowLayout } from './busLayout';
 import type { GateDef } from './types';
+
+const MONO = "'IBM Plex Mono', monospace";
+const NO_SEL = { userSelect: 'none' as const, pointerEvents: 'none' as const };
+
+// Entrée / Sortie en mode bus : rangée de cases (MSB à gauche) toujours droite,
+// repères MSB / LSB au-dessus, trait vers le port. Voir bitRowLayout.
+function bitRowShape(L: BitRowLayout, width: number, value: number, onColor: string) {
+  const { cells } = L;
+  return (
+    <>
+      <line x1={L.stub.x1} y1={L.stub.y1} x2={L.stub.x2} y2={L.stub.y2} />
+      {bitCells(width, value, { onColor, offsetX: cells.x, offsetY: cells.y, cellH: cells.h })}
+      <g
+        stroke="none"
+        fontSize="8"
+        fontWeight="600"
+        fontFamily={MONO}
+        fill="#64748b"
+        style={NO_SEL}
+      >
+        <text x={cells.x + 1} y={L.headerY}>
+          MSB
+        </text>
+        {width >= 4 && (
+          <text x={cells.x + cells.w / 2} y={L.headerY} textAnchor="middle" fill="#94a3b8">
+            /{width}
+          </text>
+        )}
+        <text x={cells.x + cells.w - 1} y={L.headerY} textAnchor="end">
+          LSB
+        </text>
+      </g>
+    </>
+  );
+}
 
 export const ioGates: Record<string, GateDef> = {
   INPUT: {
@@ -24,10 +59,16 @@ export const ioGates: Record<string, GateDef> = {
       if (width === 1) {
         return { w: 36, h: 40, inputs: [], outputs: [{ name: 'out', x: 36, y: 20, width: 1 }] };
       }
-      const cellSize = INPUT_BUS_CELL_SIZE;
-      const w = width * cellSize + 8;
-      const h = 52;
-      return { w, h, inputs: [], outputs: [{ name: 'out', x: w, y: h / 2, width }] };
+      // Mode bus : dessin fixe (les cases ne tournent pas, MSB toujours à
+      // gauche) ; l'orientation choisit seulement le bord du port de sortie.
+      const L = bitRowLayout(width, comp?.state?.orientation, 'out');
+      return {
+        w: L.w,
+        h: L.h,
+        fixedDisplay: true,
+        inputs: [],
+        outputs: [{ name: 'out', x: L.port.x, y: L.port.y, width }],
+      };
     },
     shape: (comp, outputValue, _i, _ibn, angle) => {
       const width = comp?.state?.width ?? 1;
@@ -62,28 +103,8 @@ export const ioGates: Record<string, GateDef> = {
         );
       }
       // Mode bus : une rangée de N cellules cliquables (un bit par case).
-      const totalW = width * INPUT_BUS_CELL_SIZE;
-      const h = 52;
-      const cells = bitCells(width, v, { onColor: 'var(--input-on, #84cc16)', angle });
-      return (
-        <>
-          {cells}
-          <UprightText
-            angle={angle}
-            x={totalW / 2}
-            y={8}
-            textAnchor="middle"
-            fontSize="9"
-            fontWeight="600"
-            fontFamily="'IBM Plex Mono', monospace"
-            fill="#475569"
-            style={{ userSelect: 'none', pointerEvents: 'none' }}
-          >
-            MSB ··· LSB · /{width}
-          </UprightText>
-          <line x1={totalW} y1={h / 2} x2={totalW + 8} y2={h / 2} />
-        </>
-      );
+      const L = bitRowLayout(width, comp?.state?.orientation, 'out');
+      return bitRowShape(L, width, v, 'var(--input-on, #84cc16)');
     },
   },
   OUTPUT: {
@@ -99,11 +120,16 @@ export const ioGates: Record<string, GateDef> = {
       if (width === 1) {
         return { w: 36, h: 40, inputs: [{ name: 'in0', x: 0, y: 20, width: 1 }], outputs: [] };
       }
-      // Mode bus : rangée de N cellules (visuel identique à l'entrée), port à gauche.
-      const cellSize = INPUT_BUS_CELL_SIZE;
-      const w = width * cellSize + 8;
-      const h = 52;
-      return { w, h, inputs: [{ name: 'in0', x: 0, y: h / 2, width }], outputs: [] };
+      // Mode bus : rangée de N cellules (visuel identique à l'entrée), dessin
+      // fixe ; l'orientation choisit le bord du port d'entrée.
+      const L = bitRowLayout(width, comp?.state?.orientation, 'in');
+      return {
+        w: L.w,
+        h: L.h,
+        fixedDisplay: true,
+        inputs: [{ name: 'in0', x: L.port.x, y: L.port.y, width }],
+        outputs: [],
+      };
     },
     shape: (comp, _outputValue, inputValue, _ibn, angle) => {
       const width = comp?.state?.width ?? 1;
@@ -139,33 +165,8 @@ export const ioGates: Record<string, GateDef> = {
       }
       // Mode bus : une rangée de N cellules en lecture seule (un bit par case),
       // visuel identique à l'entrée mais en couleur de sortie. Pas de dec/hex/bin.
-      const totalW = width * INPUT_BUS_CELL_SIZE;
-      const h = 52;
-      const offX = 8; // décalage pour le stub d'entrée à gauche
-      const cells = bitCells(width, v, {
-        onColor: 'var(--output-on, #f97316)',
-        offsetX: offX,
-        angle,
-      });
-      return (
-        <>
-          {cells}
-          <UprightText
-            angle={angle}
-            x={offX + totalW / 2}
-            y={8}
-            textAnchor="middle"
-            fontSize="9"
-            fontWeight="600"
-            fontFamily="'IBM Plex Mono', monospace"
-            fill="#475569"
-            style={{ userSelect: 'none', pointerEvents: 'none' }}
-          >
-            MSB ··· LSB · /{width}
-          </UprightText>
-          <line x1="0" y1={h / 2} x2={offX} y2={h / 2} />
-        </>
-      );
+      const L = bitRowLayout(width, comp?.state?.orientation, 'in');
+      return bitRowShape(L, width, v, 'var(--output-on, #f97316)');
     },
   },
   CLOCK: {

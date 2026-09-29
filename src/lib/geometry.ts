@@ -216,6 +216,108 @@ export function offsetManhattan(points: Point[], offset: number): Point[] {
   return result;
 }
 
+/**
+ * Retire les sommets en double et les sommets alignés (deux segments qui se
+ * prolongent). Un demi-tour (retour en arrière) est conservé. Indispensable
+ * avant de décaler des pistes : un segment de longueur nulle (fil droit tracé
+ * avec un « coude » vide) fausserait l'épaisseur admissible du ruban.
+ */
+export function simplifyPolyline(points: Point[]): Point[] {
+  const out: Point[] = [];
+  for (const p of points) {
+    const last = out[out.length - 1];
+    if (last && last[0] === p[0] && last[1] === p[1]) continue;
+    out.push([p[0], p[1]]);
+  }
+  let i = 1;
+  while (i < out.length - 1) {
+    const [a, b, c] = [out[i - 1], out[i], out[i + 1]];
+    const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    const dot = (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1]);
+    if (Math.abs(cross) < 1e-9 && dot >= 0) out.splice(i, 1);
+    else i++;
+  }
+  return out;
+}
+
+export interface BusRibbon {
+  /** Une polyline par bit, de la piste d'offset le plus négatif (MSB) au LSB. */
+  tracks: Point[][];
+  /** Espacement réellement utilisé entre deux pistes (≤ pitch demandé). */
+  pitch: number;
+  /** Demi-épaisseur du ruban (distance axe → piste extrême). */
+  halfThick: number;
+}
+
+/**
+ * Ruban d'un fil de bus : N pistes PARALLÈLES qui ne convergent vers le port
+ * que sur les `taper` derniers pixels, comme une nappe branchée sur un
+ * connecteur (l'ancien tracé faisait converger les pistes sur tout le premier
+ * et le dernier segment, d'où un « nœud papillon » de diagonales dès que le fil
+ * faisait un petit décrochement).
+ *
+ * L'épaisseur est plafonnée à `maxThickness` (un bus 8 bits ne déborde plus
+ * sur les ports voisins) et, si le tracé est serré, réduite pour qu'aucune
+ * piste ne recule ou ne croise ses voisines.
+ */
+export function makeBusRibbon(
+  raw: Point[],
+  n: number,
+  pitch: number,
+  { taper = 6, maxThickness = 18 }: { taper?: number; maxThickness?: number } = {},
+): BusRibbon {
+  const pts = simplifyPolyline(raw);
+  if (n <= 1 || pts.length < 2) return { tracks: [pts], pitch, halfThick: 0 };
+
+  const m = pts.length - 1; // nombre de segments
+  const len = (i: number) => Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+  const dir = (i: number): Point => {
+    const l = len(i) || 1;
+    return [(pts[i + 1][0] - pts[i][0]) / l, (pts[i + 1][1] - pts[i][1]) / l];
+  };
+  const perp = (d: Point): Point => [-d[1], d[0]];
+
+  // Convergence raccourcie si les segments extrêmes sont courts.
+  const t = m === 1 ? Math.min(taper, len(0) / 3) : Math.min(taper, len(0) / 3, len(m - 1) / 3);
+
+  // Demi-épaisseur tolérée par la géométrie : le 1er/dernier segment doit
+  // rester plus long que la convergence, un segment intérieur plus long que
+  // l'épaisseur totale (cas du demi-tour, où les pistes intérieures raccourcissent).
+  let room = Infinity;
+  if (m > 1) {
+    room = Math.min(len(0) - t, len(m - 1) - t);
+    for (let i = 1; i < m - 1; i++) room = Math.min(room, len(i) / 2);
+  }
+  const wanted = ((n - 1) * pitch) / 2;
+  const halfThick = Math.max(0, Math.min(wanted, maxThickness / 2, room));
+  const pitchEff = n > 1 ? (2 * halfThick) / (n - 1) : pitch;
+
+  // Axe du ruban entre les deux zones de convergence.
+  const d0 = dir(0);
+  const dl = dir(m - 1);
+  const a: Point = [pts[0][0] + t * d0[0], pts[0][1] + t * d0[1]];
+  const b: Point = [pts[m][0] - t * dl[0], pts[m][1] - t * dl[1]];
+  const inner: Point[] = [a, ...pts.slice(1, m), b];
+
+  const tracks: Point[][] = [];
+  for (let k = 0; k < n; k++) {
+    const o = (k - (n - 1) / 2) * pitchEff;
+    const track: Point[] = [[pts[0][0], pts[0][1]]];
+    for (let i = 0; i < inner.length; i++) {
+      // Extrémités : décalage perpendiculaire au segment ; coins : onglet
+      // (somme des deux perpendiculaires), qui garde l'écart constant.
+      const pPrev = i > 0 ? perp(dir(Math.min(i - 1, m - 1))) : null;
+      const pNext = i < inner.length - 1 ? perp(dir(Math.min(i, m - 1))) : null;
+      const [ox, oy]: Point =
+        pPrev && pNext ? [pPrev[0] + pNext[0], pPrev[1] + pNext[1]] : (pPrev ?? pNext)!;
+      track.push([inner[i][0] + o * ox, inner[i][1] + o * oy]);
+    }
+    track.push([pts[m][0], pts[m][1]]);
+    tracks.push(track);
+  }
+  return { tracks, pitch: pitchEff, halfThick };
+}
+
 // N polylines parallèles pour un fil de bus (espacement `pitch`, centrées sur l'axe).
 export function makeBusTracks(points: Point[], n: number, pitch: number): Point[][] {
   if (n <= 1) return [points];

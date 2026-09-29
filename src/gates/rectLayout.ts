@@ -50,24 +50,37 @@ export function rectLayout(opts: {
   contentH: number;
   inMargin: number; // espace pour les labels du côté des entrées (dans la boîte)
   outMargin: number; // côté des sorties
+  /** Écart entre deux ports voisins (défaut 24). */
+  spacing?: number;
+  /**
+   * Pas de grille : dimensions arrondies à ce pas, pour que les ports tombent
+   * sur la grille (20 → ports à des multiples de 10, comme les portes logiques).
+   */
+  grid?: number;
 }): RectLayout {
   const o = opts.orientation ?? 'right';
   const { inputs, outputs, contentW, contentH, inMargin, outMargin } = opts;
+  const spacing = opts.spacing ?? SPACING;
+  // Le long du bord des ports : pas entier (ports centrés → multiples de g/2).
+  // En travers : demi-pas suffit (le port du bord opposé tombe à x = w).
+  const snapUp = (v: number, step = opts.grid) => (step ? Math.ceil(v / step) * step : v);
   const horizontal = o === 'right' || o === 'left'; // ports sur bords gauche/droite
   const inputFirst = o === 'right' || o === 'down'; // entrées sur bord début (gauche/haut)
 
   const maxN = Math.max(inputs.length, outputs.length);
-  const portsSpan = Math.max(0, maxN - 1) * SPACING;
+  const portsSpan = Math.max(0, maxN - 1) * spacing;
 
   // Axe "cross" = entrées → sorties ; axe "along" = le long du bord des ports.
   const crossContent = horizontal ? contentW : contentH;
   const alongContent = horizontal ? contentH : contentW;
-  const cross = 2 * STUB + inMargin + crossContent + outMargin;
+  const cross = snapUp(
+    2 * STUB + inMargin + crossContent + outMargin,
+    opts.grid ? opts.grid / 2 : undefined,
+  );
   // Assez grand pour : le contenu (avec marge au bord) OU l'étalement des ports
   // (avec marge entre le bord de boîte et les ports extrêmes).
-  const along = Math.max(
-    alongContent + 2 * STUB + 2 * EDGE_PAD,
-    portsSpan + 2 * STUB + 2 * PORT_END_PAD,
+  const along = snapUp(
+    Math.max(alongContent + 2 * STUB + 2 * EDGE_PAD, portsSpan + 2 * STUB + 2 * PORT_END_PAD),
   );
 
   const w = horizontal ? cross : along;
@@ -84,12 +97,12 @@ export function rectLayout(opts: {
   const placeEdge = (specs: PortSpec[], isInput: boolean) => {
     const n = specs.length;
     const alongTotal = horizontal ? h : w;
-    const start = alongTotal / 2 - ((n - 1) * SPACING) / 2;
+    const start = alongTotal / 2 - ((n - 1) * spacing) / 2;
     const atStart = isInput ? inputFirst : !inputFirst; // bord début (x=0 / y=0) ?
     const ports: Port[] = [];
     const items: RectPort[] = [];
     specs.forEach((sp, i) => {
-      const a = start + i * SPACING;
+      const a = start + i * spacing;
       let px: number, py: number, sx: number, sy: number, lx: number, ly: number;
       let anchor: 'start' | 'middle' | 'end';
       let edge: 'L' | 'R' | 'T' | 'B';

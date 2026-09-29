@@ -8,6 +8,8 @@ import {
   pointsToStr,
   offsetManhattan,
   makeBusTracks,
+  simplifyPolyline,
+  makeBusRibbon,
 } from '../src/lib/geometry';
 
 // Vérifie l'axialité (segments H/V) des segments [start, end[ d'une polyline.
@@ -160,5 +162,112 @@ describe('makeBusTracks', () => {
       expect(t[t.length - 1]).toEqual(path[path.length - 1]);
       expectAxial(t, 1, t.length - 2);
     }
+  });
+});
+
+describe('simplifyPolyline', () => {
+  it('retire doublons et sommets alignés (coude vide d’un fil droit)', () => {
+    expect(
+      simplifyPolyline([
+        [0, 10],
+        [40, 10],
+        [40, 10],
+        [100, 10],
+      ]),
+    ).toEqual([
+      [0, 10],
+      [100, 10],
+    ]);
+  });
+  it('garde les vrais coudes', () => {
+    const z = [
+      [0, 0],
+      [50, 0],
+      [50, 40],
+      [100, 40],
+    ];
+    expect(simplifyPolyline(z)).toEqual(z);
+  });
+});
+
+describe('makeBusRibbon', () => {
+  const z = [
+    [0, 0],
+    [50, 0],
+    [50, 40],
+    [100, 40],
+  ];
+  // Écart entre deux pistes voisines, mesuré sur un segment horizontal.
+  const gapOn = (tracks, i) => Math.abs(tracks[1][i][1] - tracks[0][i][1]);
+
+  it('les pistes partent et arrivent exactement aux ports', () => {
+    const { tracks } = makeBusRibbon(z, 4, 3);
+    expect(tracks).toHaveLength(4);
+    for (const t of tracks) {
+      expect(t[0]).toEqual([0, 0]);
+      expect(t[t.length - 1]).toEqual([100, 40]);
+    }
+  });
+
+  it('les pistes restent parallèles et axiales entre les deux convergences', () => {
+    const { tracks, pitch } = makeBusRibbon(z, 4, 3);
+    expect(pitch).toBe(3);
+    for (const t of tracks) expectAxial(t, 1, t.length - 2);
+    expect(gapOn(tracks, 1)).toBeCloseTo(3);
+    expect(gapOn(tracks, 2)).toBeCloseTo(3);
+  });
+
+  it('la convergence se limite aux quelques pixels du port', () => {
+    const { tracks } = makeBusRibbon(z, 4, 3, { taper: 6 });
+    // 2e sommet de chaque piste : 6 px après le port, déjà à sa place dans le ruban.
+    for (const t of tracks) expect(t[1][0]).toBeCloseTo(6);
+  });
+
+  it('aucune piste ne recule sur le premier segment (pas de nœud papillon)', () => {
+    const { tracks } = makeBusRibbon(z, 8, 3.7);
+    for (const t of tracks) {
+      expect(t[2][0]).toBeGreaterThanOrEqual(t[1][0]); // 1er segment vers la droite
+      expect(t[t.length - 2][0]).toBeLessThanOrEqual(t[t.length - 1][0] + 1e-9);
+    }
+  });
+
+  it('plafonne l’épaisseur (bus large)', () => {
+    const straight = [
+      [0, 0],
+      [300, 0],
+    ];
+    const { halfThick, pitch } = makeBusRibbon(straight, 32, 3.7, { maxThickness: 18 });
+    expect(halfThick).toBeCloseTo(9);
+    expect(pitch).toBeCloseTo(18 / 31);
+  });
+
+  it('amincit le ruban sur un tracé trop serré pour son épaisseur', () => {
+    const tight = [
+      [0, 0],
+      [12, 0],
+      [12, 40],
+      [60, 40],
+    ];
+    const { halfThick } = makeBusRibbon(tight, 8, 3.7, { taper: 6 });
+    expect(halfThick).toBeLessThanOrEqual(12 - 4 + 1e-9); // 1er segment − convergence (réduite)
+  });
+
+  it('un fil droit tracé avec un coude vide reste un ruban droit', () => {
+    const { tracks } = makeBusRibbon(
+      [
+        [0, 20],
+        [60, 20],
+        [60, 20],
+        [120, 20],
+      ],
+      4,
+      3,
+    );
+    for (const t of tracks) expect(t).toHaveLength(4); // port, 2 sommets du ruban, port
+  });
+
+  it('n ≤ 1 → une seule piste', () => {
+    const { tracks } = makeBusRibbon(z, 1, 3);
+    expect(tracks).toHaveLength(1);
   });
 });

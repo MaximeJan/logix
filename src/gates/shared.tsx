@@ -6,16 +6,21 @@ import type { CircuitComponent } from '../domain/types';
 import { UprightText } from './UprightText';
 
 // Rangée de N cellules « un bit par case », partagée par l'entrée et la sortie en
-// mode bus (MSB à gauche). `onColor` = couleur du bit allumé ; `offsetX` décale la
-// rangée (la sortie laisse 8 px à gauche pour le stub du port d'entrée).
+// mode bus (MSB à gauche). `onColor` = couleur du bit allumé ; `offsetX`/`offsetY`
+// et `cellH` placent la rangée (voir bitRowLayout).
 export function bitCells(
   width: number,
   value: number,
-  { onColor, offsetX = 0, angle }: { onColor: string; offsetX?: number; angle?: number },
+  {
+    onColor,
+    offsetX = 0,
+    offsetY = 12,
+    cellH = 34,
+    angle,
+  }: { onColor: string; offsetX?: number; offsetY?: number; cellH?: number; angle?: number },
 ): ReactNode[] {
   const size = INPUT_BUS_CELL_SIZE;
-  const cellY = 12;
-  const cellH = 34;
+  const cellY = offsetY;
   const out: ReactNode[] = [];
   for (let i = 0; i < width; i++) {
     const bit = (value >> (width - 1 - i)) & 1;
@@ -41,9 +46,9 @@ export function bitCells(
         key={`t${i}`}
         angle={angle}
         x={cx}
-        y={cy + 5}
+        y={cy + 4.5}
         textAnchor="middle"
-        fontSize={size >= 18 ? 14 : 11}
+        fontSize={Math.min(size >= 18 ? 14 : 11, cellH - 7)}
         fontWeight="700"
         fontFamily="'IBM Plex Mono', monospace"
         fill={bit ? '#1a2e05' : '#94a3b8'}
