@@ -6,7 +6,7 @@ import type {
 } from 'react';
 import { GRID, PORT_R } from '../lib/constants';
 import { asInt, portKey } from '../lib/sim';
-import { routeWireDirected, pointsToStr, makeBusTracks } from '../lib/geometry';
+import { routeWireDirected, pointsToStr, makeBusRibbon } from '../lib/geometry';
 import { interactiveLayout } from '../lib/custom-interactive';
 import { getDef, getPortPosition, getPortWidth, getPortFacing } from '../gates/registry';
 import type { Circuit, CircuitComponent, Port, SimResult, Selection, Wire } from '../domain/types';
@@ -176,13 +176,17 @@ export function CircuitCanvas({
           );
         }
 
-        const strokeBit = prefs.busBitStroke ?? 2.5;
+        // Ruban de N pistes parallèles (une par bit), qui ne converge vers les
+        // ports que sur quelques pixels ; épaisseur plafonnée, et réduite si le
+        // tracé est serré (voir makeBusRibbon). Le trait suit le même rapport.
+        const prefStroke = prefs.busBitStroke ?? 2.5;
         const gap = prefs.busBitGap ?? 1.2;
         const offColor = prefs.busOffColor ?? '#0f172a';
-        const pitch = strokeBit + gap;
-        const halfThick = ((wireWidth - 1) * pitch) / 2;
-        const tracks = makeBusTracks(points, wireWidth, pitch);
-        const totalThick = wireWidth * pitch + 4;
+        const pitch = prefStroke + gap;
+        const ribbon = makeBusRibbon(points, wireWidth, pitch);
+        const strokeBit = prefStroke * Math.min(1, ribbon.pitch / pitch);
+        const { tracks, halfThick } = ribbon;
+        const totalThick = 2 * halfThick + strokeBit + 4;
         return (
           <g key={w.id} onClick={(e) => onWireClick(e, w)} style={{ cursor: 'pointer' }}>
             <polyline
@@ -345,18 +349,37 @@ export function CircuitCanvas({
                 </g>
               );
             })()}
-            {(comp.type === 'INPUT' || comp.type === 'OUTPUT') && comp.label && (
-              <text
-                x={comp.type === 'INPUT' ? -4 : def.w + 4}
-                y={def.h / 2 + 4}
-                textAnchor={comp.type === 'INPUT' ? 'end' : 'start'}
-                fontSize="12"
-                fontFamily="'IBM Plex Mono', monospace"
-                fill="#475569"
-              >
-                {comp.label}
-              </text>
-            )}
+            {(comp.type === 'INPUT' || comp.type === 'OUTPUT') &&
+              comp.label &&
+              (() => {
+                // Étiquette du côté OPPOSÉ au port, quelle que soit l'orientation :
+                // elle ne chevauche ni le fil ni les cases d'un bus.
+                const [fx, fy] =
+                  comp.type === 'INPUT'
+                    ? getPortFacing(comp, 'out', 'output', circuit.customDefinitions)
+                    : getPortFacing(comp, 'in0', 'input', circuit.customDefinitions);
+                const pos =
+                  fx === 1
+                    ? { x: -6, y: def.h / 2 + 4, anchor: 'end' as const }
+                    : fx === -1
+                      ? { x: def.w + 6, y: def.h / 2 + 4, anchor: 'start' as const }
+                      : fy === 1
+                        ? { x: def.w / 2, y: -7, anchor: 'middle' as const }
+                        : { x: def.w / 2, y: def.h + 15, anchor: 'middle' as const };
+                return (
+                  <text
+                    x={pos.x}
+                    y={pos.y}
+                    textAnchor={pos.anchor}
+                    fontSize="12"
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fill="#475569"
+                    stroke="none"
+                  >
+                    {comp.label}
+                  </text>
+                );
+              })()}
             {/* Composant custom interactif : cellules d'entrée cliquables (valeur
                 depuis state.inValues) + valeurs de sortie (depuis la simulation). */}
             {def.interactive &&

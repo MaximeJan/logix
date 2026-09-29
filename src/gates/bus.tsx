@@ -1,9 +1,112 @@
 // Définitions de composants — catégorie « bus ». Agrégées dans ./index.
 import { asInt, maskTo } from '../lib/sim';
 import { UprightText } from './UprightText';
+import { busNodeLayout } from './busLayout';
+import { rectLayout, type RectPort } from './rectLayout';
+import { RectShape } from './RectShape';
 import type { GateDef } from './types';
+import type { CircuitComponent } from '../domain/types';
 
 const NO_SEL = { userSelect: 'none' as const, pointerEvents: 'none' as const };
+const MONO = "'IBM Plex Mono', monospace";
+
+const orientationOf = (comp?: CircuitComponent) => comp?.state?.orientation;
+const busSources = (state?: { sources?: number }) =>
+  Math.max(2, Math.min(8, Math.floor(state?.sources ?? 2)));
+
+// Ports des boîtes « bus » : tous les 20 px, dimensions arrondies à la grille,
+// pour que deux composants alignés se relient par un fil droit.
+const ON_GRID = { spacing: 20, grid: 20 } as const;
+
+// Fond coloré derrière l'étiquette d'un port (bit à 1, sortie active…).
+function labelHighlight(p: RectPort, key: string) {
+  const w = p.label.length * 7.2 + 6;
+  const x = p.anchor === 'start' ? p.lx - 3 : p.anchor === 'end' ? p.lx - w + 3 : p.lx - w / 2;
+  return (
+    <rect
+      key={key}
+      x={x}
+      y={p.ly - 11}
+      width={w}
+      height={15}
+      rx="2"
+      fill="var(--lcd-text, #fbbf24)"
+      opacity="0.4"
+    />
+  );
+}
+
+const sliceLayout = (comp?: CircuitComponent) => {
+  const { width, n } = sliceRange(comp?.state);
+  return rectLayout({
+    orientation: orientationOf(comp),
+    inputs: [{ name: 'in', width, label: '' }],
+    outputs: [{ name: 'out', width: n, label: '' }],
+    contentW: 50,
+    contentH: 36,
+    inMargin: 4,
+    outMargin: 4,
+    ...ON_GRID,
+  });
+};
+
+// Bits d'un séparateur/fusionneur, MSB en premier (convention : MSB à l'extérieur).
+const bitSpecs = (n: number) =>
+  Array.from({ length: n }, (_, i) => {
+    const bit = n - 1 - i;
+    return { name: `b${bit}`, width: 1, label: String(bit) };
+  });
+
+const splitterLayout = (comp?: CircuitComponent) => {
+  const n = comp?.state?.width ?? 4;
+  return rectLayout({
+    orientation: orientationOf(comp),
+    inputs: [{ name: 'in', width: n, label: 'in' }],
+    outputs: bitSpecs(n),
+    contentW: 0,
+    contentH: 0,
+    inMargin: 22,
+    outMargin: 22,
+    ...ON_GRID,
+  });
+};
+
+const mergerLayout = (comp?: CircuitComponent) => {
+  const n = comp?.state?.width ?? 4;
+  return rectLayout({
+    orientation: orientationOf(comp),
+    inputs: bitSpecs(n),
+    outputs: [{ name: 'out', width: n, label: 'out' }],
+    contentW: 0,
+    contentH: 0,
+    inMargin: 22,
+    outMargin: 28,
+    ...ON_GRID,
+  });
+};
+
+const decoderLayout = (comp?: CircuitComponent) => {
+  const bw = comp?.state?.width ?? 2;
+  const n = 1 << bw;
+  return rectLayout({
+    orientation: orientationOf(comp),
+    inputs: [{ name: 'in', width: bw, label: 'in' }],
+    outputs: Array.from({ length: n }, (_, i) => ({ name: `out${i}`, width: 1, label: String(i) })),
+    contentW: 26,
+    contentH: 12,
+    inMargin: 22,
+    outMargin: 22,
+    ...ON_GRID,
+  });
+};
+
+// MUX / DEMUX : voies tous les 20 px (y = 30, 50, …), sélecteur au milieu du bas.
+const MUX_W = 80;
+const laneY = (i: number) => 30 + 20 * i;
+const muxGeom = (sw: number) => {
+  const n = 1 << sw;
+  return { n, h: 20 * n + 40 };
+};
 
 const clampInt = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, Math.floor(v)));
@@ -20,244 +123,187 @@ export const busGates: Record<string, GateDef> = {
   SLICE: {
     label: 'Tranche',
     category: 'Bus',
-    w: 78,
-    h: 52,
+    w: 100,
+    h: 80,
     inputs: [],
     outputs: [],
     // Extrait le champ de bits [hi..lo] d'un bus `in` de `width` bits.
     // out = (in >> lo) sur (hi-lo+1) bits. Idéal pour décoder une instruction
-    // (opcode = [7..4], Rd = [3..2], Rs = [1..0]).
+    // (opcode = [7..4], Rd = [3..2], Rs = [1..0]). Dessin fixe.
+    fixedDisplay: true,
     defaultState: { width: 8, hi: 3, lo: 0 },
     getDynamicGeometry: (comp) => {
-      const { width, n } = sliceRange(comp?.state);
-      const W = 78;
-      const H = 52;
-      return {
-        w: W,
-        h: H,
-        inputs: [{ name: 'in', x: 0, y: H / 2, width }],
-        outputs: [{ name: 'out', x: W, y: H / 2, width: n }],
-      };
+      const L = sliceLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, outputValue, _i, _ibn, angle) => {
+    shape: (comp, outputValue) => {
       const { lo, hi, n } = sliceRange(comp?.state);
-      const W = 78;
-      const H = 52;
-      const outVal = maskTo(n, asInt(outputValue));
+      const L = sliceLayout(comp);
+      const outVal = maskTo(n, asInt(outputValue)) >>> 0;
+      const c = L.content;
+      const cx = c.x + c.w / 2;
       return (
-        <>
-          <line x1="0" y1={H / 2} x2="10" y2={H / 2} strokeWidth="1.2" />
-          <line x1={W - 10} y1={H / 2} x2={W} y2={H / 2} strokeWidth="1.2" />
-          <rect
-            x="10"
-            y="8"
-            width={W - 20}
-            height={H - 16}
-            rx="2"
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          <g stroke="none">
-            <UprightText
-              angle={angle}
-              x={W / 2}
-              y={H / 2 - 1}
-              textAnchor="middle"
-              fontSize="13"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={NO_SEL}
-            >
-              [{hi}:{lo}]
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={W / 2}
-              y={H / 2 + 12}
-              textAnchor="middle"
-              fontSize="10"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill={outVal ? '#1f2937' : '#94a3b8'}
-              style={NO_SEL}
-            >
-              {outVal}
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={W / 2}
-              y="6"
-              textAnchor="middle"
-              fontSize="8"
-              fontFamily="'IBM Plex Sans', sans-serif"
-              fill="#94a3b8"
-              style={NO_SEL}
-            >
-              tranche
-            </UprightText>
-          </g>
-        </>
+        <RectShape layout={L}>
+          <text x={cx} y={c.y + 8} textAnchor="middle" fontSize="8" fill="#94a3b8" style={NO_SEL}>
+            tranche
+          </text>
+          <text
+            x={cx}
+            y={c.y + 22}
+            textAnchor="middle"
+            fontSize="12"
+            fontWeight="700"
+            fontFamily={MONO}
+            fill="#1f2937"
+            style={NO_SEL}
+          >
+            [{hi}:{lo}]
+          </text>
+          <text
+            x={cx}
+            y={c.y + 34}
+            textAnchor="middle"
+            fontSize="10"
+            fontWeight="700"
+            fontFamily={MONO}
+            fill={outVal ? '#1f2937' : '#94a3b8'}
+            style={NO_SEL}
+          >
+            {outVal}
+          </text>
+        </RectShape>
       );
     },
   },
   BUS: {
     label: 'Bus',
     category: 'Bus',
-    w: 104,
-    h: 100,
+    w: 120,
+    h: 120,
     inputs: [],
     outputs: [],
     // Bus « un seul émetteur à la fois » : N sources, chacune = une donnée
     // `in{k}` (largeur du bus) + une activation `en{k}` (1 bit). La sortie `bus`
     // porte la valeur de la source active ; ≥2 activations = conflit (rouge).
     // width = largeur du bus ; sources = nombre d'émetteurs (2..8).
+    // Dessin fixe (texte toujours droit) : l'orientation place les couples
+    // (donnée, activation) sur un bord et la sortie sur le bord opposé.
+    fixedDisplay: true,
     defaultState: { width: 8, sources: 2 },
     getDynamicGeometry: (comp) => {
-      const width = comp?.state?.width ?? 8;
-      const sources = Math.max(2, Math.min(8, comp?.state?.sources ?? 2));
-      const W = 104;
-      const slotH = 40;
-      const topPad = 30;
-      const h = Math.max(94, sources * slotH + 20);
-      const inputs = [];
-      for (let k = 0; k < sources; k++) {
-        const y = topPad + k * slotH;
-        inputs.push({ name: `in${k}`, x: 0, y, width });
-        inputs.push({ name: `en${k}`, x: 0, y: y + 18, width: 1 });
-      }
-      return { w: W, h, inputs, outputs: [{ name: 'bus', x: W, y: h / 2, width }] };
+      const L = busNodeLayout(
+        busSources(comp?.state),
+        comp?.state?.width ?? 8,
+        orientationOf(comp),
+      );
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, outputValue, _i, inputsByName, angle) => {
+    shape: (comp, outputValue, _i, inputsByName) => {
       const width = comp?.state?.width ?? 8;
-      const sources = Math.max(2, Math.min(8, comp?.state?.sources ?? 2));
-      const W = 104;
-      const slotH = 40;
-      const topPad = 30;
-      const h = Math.max(94, sources * slotH + 20);
+      const sources = busSources(comp?.state);
+      const L = busNodeLayout(sources, width, orientationOf(comp));
       const accent = 'var(--lcd-text, #fbbf24)';
       const red = '#dc2626';
       const enables: number[] = [];
       for (let k = 0; k < sources; k++) enables.push(asInt(inputsByName?.[`en${k}`] ?? 0) & 1);
       const activeCount = enables.reduce((s, e) => s + e, 0);
       const conflict = activeCount > 1;
-      const frame = conflict ? red : '#0f172a';
-      const outVal = maskTo(width, asInt(outputValue));
-
-      const stubs = [];
-      for (let k = 0; k < sources; k++) {
-        const dataY = topPad + k * slotH;
-        const enY = dataY + 18;
-        const on = enables[k] === 1;
-        stubs.push(
-          <line key={`d${k}`} x1="0" y1={dataY} x2="14" y2={dataY} strokeWidth="1.2" />,
-          <line key={`e${k}`} x1="0" y1={enY} x2="14" y2={enY} strokeWidth="1.2" />,
-          <circle
-            key={`ec${k}`}
-            cx="2.5"
-            cy={enY}
-            r="2.5"
-            fill={on ? (conflict ? red : accent) : 'white'}
-            strokeWidth="1.2"
-          />,
-        );
-      }
+      const outVal = maskTo(width, asInt(outputValue)) >>> 0;
+      const { box } = L;
       return (
         <>
-          {stubs}
-          <line x1={W - 14} y1={h / 2} x2={W} y2={h / 2} strokeWidth="1.2" />
+          {L.stubs.map((st) => (
+            <line
+              key={st.name}
+              x1={st.x1}
+              y1={st.y1}
+              x2={st.x2}
+              y2={st.y2}
+              strokeWidth={st.name.startsWith('en') ? 1.2 : 1.6}
+            />
+          ))}
           <rect
-            x="14"
-            y="8"
-            width={W - 28}
-            height={h - 16}
+            x={box.x}
+            y={box.y}
+            width={box.w}
+            height={box.h}
+            rx="3"
             fill="white"
-            stroke={frame}
+            stroke={conflict ? red : '#0f172a'}
             strokeWidth="2"
           />
-          <g stroke="none">
-            {enables.map((on, k) => {
-              const dataY = topPad + k * slotH;
-              const enY = dataY + 18;
+          <g stroke="none" fontFamily={MONO} style={NO_SEL}>
+            {L.slots.map((sl) => {
+              const on = enables[sl.k] === 1;
+              const tint = conflict ? red : accent;
               return (
-                <g key={`g${k}`}>
-                  {on === 1 && (
-                    <rect
-                      x="16"
-                      y={dataY - 9}
-                      width={W - 32}
-                      height="30"
-                      rx="2"
-                      fill={conflict ? red : accent}
-                      opacity={conflict ? 0.18 : 0.28}
-                    />
-                  )}
-                  <UprightText
-                    angle={angle}
-                    x="22"
-                    y={dataY + 4}
+                <g key={sl.k}>
+                  {/* Couple (donnée, activation) d'une même source, surligné si active */}
+                  <rect
+                    x={sl.rect.x}
+                    y={sl.rect.y}
+                    width={sl.rect.w}
+                    height={sl.rect.h}
+                    rx="3"
+                    fill={on ? tint : 'none'}
+                    fillOpacity={on ? (conflict ? 0.18 : 0.3) : 0}
+                    stroke={on ? tint : '#cbd5e1'}
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={sl.data.x}
+                    y={sl.data.y}
+                    textAnchor={sl.data.anchor}
                     fontSize="12"
-                    fontWeight={on === 1 ? '700' : '600'}
-                    fontFamily="'IBM Plex Mono', monospace"
-                    fill={on === 1 ? '#1f2937' : '#475569'}
-                    style={NO_SEL}
+                    fontWeight="700"
+                    fill={on ? '#1f2937' : '#475569'}
                   >
-                    s{k}
-                  </UprightText>
-                  <UprightText
-                    angle={angle}
-                    x="22"
-                    y={enY + 4}
+                    s{sl.k}
+                  </text>
+                  <text
+                    x={sl.en.x}
+                    y={sl.en.y}
+                    textAnchor={sl.en.anchor}
                     fontSize="9"
-                    fontFamily="'IBM Plex Mono', monospace"
-                    fill="#94a3b8"
-                    style={NO_SEL}
+                    fontWeight={on ? '700' : '400'}
+                    fill={on ? '#1f2937' : '#94a3b8'}
                   >
                     en
-                  </UprightText>
+                  </text>
                 </g>
               );
             })}
-            <UprightText
-              angle={angle}
-              x={W / 2}
-              y="21"
+            <text
+              x={L.title.x}
+              y={L.title.y}
               textAnchor="middle"
               fontSize="11"
               fontWeight="700"
               fontFamily="'IBM Plex Sans', sans-serif"
+              letterSpacing="0.5"
               fill={conflict ? red : '#475569'}
-              style={NO_SEL}
             >
               {conflict ? 'CONFLIT' : 'BUS'}
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={W - 20}
-              y={h / 2 - 6}
-              textAnchor="end"
-              fontSize="10"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#475569"
-              style={NO_SEL}
+            </text>
+            <text
+              x={L.busLabel.x}
+              y={L.busLabel.y}
+              textAnchor={L.busLabel.anchor}
+              fontSize="9"
+              fill="#94a3b8"
             >
               bus
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={W - 20}
-              y={h / 2 + 13}
-              textAnchor="end"
+            </text>
+            <text
+              x={L.value.x}
+              y={L.value.y}
+              textAnchor={L.value.anchor}
               fontSize="12"
               fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
               fill={activeCount >= 1 ? '#1f2937' : '#94a3b8'}
-              style={NO_SEL}
             >
               {outVal}
-            </UprightText>
+            </text>
           </g>
         </>
       );
@@ -267,71 +313,39 @@ export const busGates: Record<string, GateDef> = {
     label: 'Multiplexeur',
     category: 'Bus',
     w: 80,
-    h: 94,
+    h: 80,
     inputs: [],
     outputs: [],
     // selectWidth = nombre de bits de sélection (1, 2, 3 → 2, 4, 8 voies)
     // dataWidth   = largeur de chaque voie (1, 2, 4, 8, 16)
+    // Ports tous les 20 px, sur la grille : des fils droits depuis des composants alignés.
     defaultState: { selectWidth: 1, dataWidth: 1 },
     getDynamicGeometry: (comp) => {
       const sw = comp?.state?.selectWidth ?? 1;
       const dw = comp?.state?.dataWidth ?? 1;
-      const n = 1 << sw;
-      const h = Math.max(94, n * 24 + 40);
+      const { n, h } = muxGeom(sw);
       const inputs = [];
-      for (let i = 0; i < n; i++) {
-        inputs.push({ name: `in${i}`, x: 0, y: 32 + i * 24, width: dw });
-      }
-      // Sélecteur en bas (port bus de largeur sw)
-      inputs.push({ name: 'sel', x: 40, y: h, width: sw });
-      return {
-        w: 80,
-        h,
-        inputs,
-        outputs: [{ name: 'out', x: 80, y: h / 2, width: dw }],
-      };
+      for (let i = 0; i < n; i++) inputs.push({ name: `in${i}`, x: 0, y: laneY(i), width: dw });
+      inputs.push({ name: 'sel', x: MUX_W / 2, y: h, width: sw });
+      return { w: MUX_W, h, inputs, outputs: [{ name: 'out', x: MUX_W, y: h / 2, width: dw }] };
     },
     shape: (comp, _o, _i, inputsByName, angle) => {
       const sw = comp?.state?.selectWidth ?? 1;
-      const n = 1 << sw;
-      const w = 80;
-      const h = Math.max(94, n * 24 + 40);
+      const { n, h } = muxGeom(sw);
+      const w = MUX_W;
       const selVal = maskTo(sw, asInt(inputsByName?.sel ?? 0));
       const activeIdx = selVal < n ? selVal : -1;
       const accent = 'var(--lcd-text, #fbbf24)';
-      const stubs = [];
-      const labels = [];
-      for (let i = 0; i < n; i++) {
-        const y = 32 + i * 24;
-        const isActive = i === activeIdx;
-        stubs.push(<line key={`il${i}`} x1="0" y1={y} x2="14" y2={y} strokeWidth="1.2" />);
-        stubs.push(
-          <circle
-            key={`ic${i}`}
-            cx="2.5"
-            cy={y}
-            r="2.5"
-            fill={isActive ? accent : 'white'}
-            strokeWidth="1.2"
-          />,
-        );
-        labels.push({ i, y, isActive });
-      }
-      const outActive = activeIdx >= 0;
+      const lanes = Array.from({ length: n }, (_, i) => i);
+      // Pivoté d'un quart de tour, « sel » s'écarte du bord biseauté (sinon il le touche).
+      const vertical = angle === 90 || angle === 270;
       return (
         <>
-          {stubs}
+          {lanes.map((i) => (
+            <line key={`il${i}`} x1="0" y1={laneY(i)} x2="14" y2={laneY(i)} strokeWidth="1.2" />
+          ))}
           <line x1={w - 14} y1={h / 2} x2={w} y2={h / 2} strokeWidth="1.2" />
-          <circle
-            cx={w}
-            cy={h / 2}
-            r="3"
-            fill={outActive ? accent : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />
-          <line x1="40" y1={h} x2="40" y2={h - 14} strokeWidth="1.2" />
-          <circle cx="40" cy={h - 2.5} r="2.5" fill="white" strokeWidth="1.2" />
+          <line x1={w / 2} y1={h} x2={w / 2} y2={h - 16} strokeWidth="1.2" />
           <path
             d={`M 14 10 L ${w - 14} 22 L ${w - 14} ${h - 22} L 14 ${h - 10} Z`}
             fill="white"
@@ -342,8 +356,8 @@ export const busGates: Record<string, GateDef> = {
           {activeIdx >= 0 && (
             <rect
               x="17"
-              y={32 + activeIdx * 24 - 8}
-              width="16"
+              y={laneY(activeIdx) - 8}
+              width="14"
               height="16"
               rx="2"
               fill={accent}
@@ -352,43 +366,44 @@ export const busGates: Record<string, GateDef> = {
             />
           )}
           <g stroke="none">
-            {labels.map(({ i, y, isActive }) => (
+            {lanes.map((i) => (
               <UprightText
                 angle={angle}
                 key={`it${i}`}
                 x="20"
-                y={y + 4}
+                y={laneY(i) + 4}
                 fontSize="12"
-                fontWeight={isActive ? '700' : '600'}
-                fontFamily="'IBM Plex Mono', monospace"
-                fill={isActive ? '#1f2937' : '#475569'}
-                style={{ userSelect: 'none', pointerEvents: 'none' }}
+                fontWeight={i === activeIdx ? '700' : '600'}
+                fontFamily={MONO}
+                fill={i === activeIdx ? '#1f2937' : '#475569'}
+                style={NO_SEL}
               >
                 {i}
               </UprightText>
             ))}
             <UprightText
               angle={angle}
-              x={w - 20}
+              x={w / 2 + 6}
               y={h / 2 + 4}
-              textAnchor="end"
+              textAnchor="middle"
               fontSize="11"
               fontWeight="700"
               fontFamily="'IBM Plex Sans', sans-serif"
               fill="#475569"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
+              style={NO_SEL}
             >
               MUX
             </UprightText>
             <UprightText
               angle={angle}
-              x="46"
-              y={h - 4}
-              fontSize="10"
+              x={w / 2 + 4}
+              y={h - (vertical ? 24 : 19)}
+              textAnchor="middle"
+              fontSize="9"
               fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
+              fontFamily={MONO}
               fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
+              style={NO_SEL}
             >
               sel
             </UprightText>
@@ -401,68 +416,44 @@ export const busGates: Record<string, GateDef> = {
     label: 'Démultiplexeur',
     category: 'Bus',
     w: 80,
-    h: 94,
+    h: 80,
     inputs: [],
     outputs: [],
     defaultState: { selectWidth: 1, dataWidth: 1 },
     getDynamicGeometry: (comp) => {
       const sw = comp?.state?.selectWidth ?? 1;
       const dw = comp?.state?.dataWidth ?? 1;
-      const n = 1 << sw;
-      const h = Math.max(94, n * 24 + 40);
+      const { n, h } = muxGeom(sw);
       const outputs = [];
-      for (let i = 0; i < n; i++) {
-        outputs.push({ name: `out${i}`, x: 80, y: 32 + i * 24, width: dw });
-      }
+      for (let i = 0; i < n; i++)
+        outputs.push({ name: `out${i}`, x: MUX_W, y: laneY(i), width: dw });
       return {
-        w: 80,
+        w: MUX_W,
         h,
         inputs: [
           { name: 'in', x: 0, y: h / 2, width: dw },
-          { name: 'sel', x: 40, y: h, width: sw },
+          { name: 'sel', x: MUX_W / 2, y: h, width: sw },
         ],
         outputs,
       };
     },
     shape: (comp, _o, _i, inputsByName, angle) => {
       const sw = comp?.state?.selectWidth ?? 1;
-      const n = 1 << sw;
-      const w = 80;
-      const h = Math.max(94, n * 24 + 40);
+      const { n, h } = muxGeom(sw);
+      const w = MUX_W;
       const selVal = maskTo(sw, asInt(inputsByName?.sel ?? 0));
       const activeIdx = selVal < n ? selVal : -1;
       const accent = 'var(--lcd-text, #fbbf24)';
-      const inVal = asInt(inputsByName?.in ?? 0);
-      const stubs = [];
-      const labels = [];
-      for (let i = 0; i < n; i++) {
-        const y = 32 + i * 24;
-        const isActive = i === activeIdx;
-        // La sortie active porte la valeur d'entrée, les autres sont à 0
-        const outDot = isActive && inVal !== 0 ? accent : '#1f2937';
-        stubs.push(<line key={`ol${i}`} x1={w - 14} y1={y} x2={w} y2={y} strokeWidth="1.2" />);
-        stubs.push(
-          <circle
-            key={`oc${i}`}
-            cx={w}
-            cy={y}
-            r="3"
-            fill={outDot}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />,
-        );
-        labels.push({ i, y, isActive });
-      }
+      const lanes = Array.from({ length: n }, (_, i) => i);
+      // Pivoté d'un quart de tour, « sel » s'écarte du bord biseauté (sinon il le touche).
+      const vertical = angle === 90 || angle === 270;
       return (
         <>
-          {stubs}
-          {/* Entrée gauche : stub + cercle */}
+          {lanes.map((i) => (
+            <line key={`ol${i}`} x1={w - 14} y1={laneY(i)} x2={w} y2={laneY(i)} strokeWidth="1.2" />
+          ))}
           <line x1="0" y1={h / 2} x2="14" y2={h / 2} strokeWidth="1.2" />
-          <circle cx="2.5" cy={h / 2} r="2.5" fill="white" strokeWidth="1.2" />
-          {/* sel : stub + cercle */}
-          <line x1="40" y1={h} x2="40" y2={h - 14} strokeWidth="1.2" />
-          <circle cx="40" cy={h - 2.5} r="2.5" fill="white" strokeWidth="1.2" />
+          <line x1={w / 2} y1={h} x2={w / 2} y2={h - 16} strokeWidth="1.2" />
           {/* Boîtier trapézoïdal (étroit à gauche, large à droite) */}
           <path
             d={`M 14 22 L ${w - 14} 10 L ${w - 14} ${h - 10} L 14 ${h - 22} Z`}
@@ -471,12 +462,11 @@ export const busGates: Record<string, GateDef> = {
             strokeWidth="2"
             strokeLinejoin="round"
           />
-          {/* Fond surligné sous l'étiquette de la voie active */}
           {activeIdx >= 0 && (
             <rect
-              x={w - 33}
-              y={32 + activeIdx * 24 - 8}
-              width="16"
+              x={w - 31}
+              y={laneY(activeIdx) - 8}
+              width="14"
               height="16"
               rx="2"
               fill={accent}
@@ -485,43 +475,45 @@ export const busGates: Record<string, GateDef> = {
             />
           )}
           <g stroke="none">
-            {labels.map(({ i, y, isActive }) => (
+            {lanes.map((i) => (
               <UprightText
                 angle={angle}
                 key={`ot${i}`}
                 x={w - 20}
-                y={y + 4}
+                y={laneY(i) + 4}
                 fontSize="12"
                 textAnchor="end"
-                fontWeight={isActive ? '700' : '600'}
-                fontFamily="'IBM Plex Mono', monospace"
-                fill={isActive ? '#1f2937' : '#475569'}
-                style={{ userSelect: 'none', pointerEvents: 'none' }}
+                fontWeight={i === activeIdx ? '700' : '600'}
+                fontFamily={MONO}
+                fill={i === activeIdx ? '#1f2937' : '#475569'}
+                style={NO_SEL}
               >
                 {i}
               </UprightText>
             ))}
             <UprightText
               angle={angle}
-              x="20"
+              x={w / 2 - 6}
               y={h / 2 + 4}
+              textAnchor="middle"
               fontSize="11"
               fontWeight="700"
               fontFamily="'IBM Plex Sans', sans-serif"
               fill="#475569"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
+              style={NO_SEL}
             >
               DMX
             </UprightText>
             <UprightText
               angle={angle}
-              x="46"
-              y={h - 4}
-              fontSize="10"
+              x={w / 2 + (vertical ? 6 : -4)}
+              y={h - (vertical ? 24 : 19)}
+              textAnchor="middle"
+              fontSize="9"
               fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
+              fontFamily={MONO}
               fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
+              style={NO_SEL}
             >
               sel
             </UprightText>
@@ -533,113 +525,39 @@ export const busGates: Record<string, GateDef> = {
   DECODER: {
     label: 'Décodeur',
     category: 'Bus',
-    w: 80,
-    h: 124,
+    w: 100,
+    h: 120,
     inputs: [],
     outputs: [],
-    // width = nombre de bits d'entrée ; produit 2^width sorties 1-bit
+    // width = nombre de bits d'entrée ; produit 2^width sorties 1-bit. Dessin fixe.
+    fixedDisplay: true,
     defaultState: { width: 2 },
     getDynamicGeometry: (comp) => {
-      const bw = comp?.state?.width ?? 2;
-      const n = 1 << bw;
-      const h = Math.max(94, n * 24 + 28);
-      const outputs = [];
-      for (let i = 0; i < n; i++) {
-        outputs.push({ name: `out${i}`, x: 80, y: 22 + i * 24, width: 1 });
-      }
-      return {
-        w: 80,
-        h,
-        inputs: [{ name: 'in', x: 0, y: h / 2, width: bw }],
-        outputs,
-      };
+      const L = decoderLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, _o, _i, inputsByName, angle) => {
+    shape: (comp, _o, _i, inputsByName) => {
       const bw = comp?.state?.width ?? 2;
       const n = 1 << bw;
-      const W = 80;
-      const h = Math.max(94, n * 24 + 28);
+      const L = decoderLayout(comp);
       const inVal = maskTo(bw, asInt(inputsByName?.in ?? 0));
-      const activeIdx = inVal < n ? inVal : -1;
-      const accent = 'var(--lcd-text, #fbbf24)';
-      const stubs = [];
-      const labels = [];
-      for (let i = 0; i < n; i++) {
-        const y = 22 + i * 24;
-        const isActive = i === activeIdx;
-        stubs.push(<line key={`ol${i}`} x1={W - 14} y1={y} x2={W} y2={y} strokeWidth="1.2" />);
-        stubs.push(
-          <circle
-            key={`op${i}`}
-            cx={W}
-            cy={y}
-            r="3"
-            fill={isActive ? accent : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />,
-        );
-        labels.push({ i, y, isActive });
-      }
+      const active = L.ports.find((p) => p.name === `out${inVal}`);
+      const c = L.content;
       return (
-        <>
-          {stubs}
-          {/* Entrée gauche : stub + cercle vide */}
-          <line x1="0" y1={h / 2} x2="14" y2={h / 2} strokeWidth="1.2" />
-          <circle cx="2.5" cy={h / 2} r="2.5" fill="white" strokeWidth="1.2" />
-          {/* Boîtier */}
-          <rect
-            x="14"
-            y="10"
-            width={W - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          <g stroke="none">
-            {labels.map(({ i, y, isActive }) => (
-              <UprightText
-                angle={angle}
-                key={`ot${i}`}
-                x={W - 20}
-                y={y + 4}
-                fontSize="12"
-                textAnchor="end"
-                fontWeight={isActive ? '700' : '600'}
-                fontFamily="'IBM Plex Mono', monospace"
-                fill={isActive ? '#1f2937' : '#475569'}
-                style={{ userSelect: 'none', pointerEvents: 'none' }}
-              >
-                {i}
-              </UprightText>
-            ))}
-            <UprightText
-              angle={angle}
-              x="20"
-              y={h / 2 + 1}
-              fontSize="11"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              in
-            </UprightText>
-            <UprightText
-              angle={angle}
-              x={W / 2 - 4}
-              y={h - 16}
-              textAnchor="middle"
-              fontSize="9"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#94a3b8"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              {bw}→{n}
-            </UprightText>
-          </g>
-        </>
+        <RectShape layout={L}>
+          {active && labelHighlight(active, 'hl')}
+          <text
+            x={c.x + c.w / 2}
+            y={c.y + c.h / 2 + 3}
+            textAnchor="middle"
+            fontSize="9"
+            fontFamily={MONO}
+            fill="#94a3b8"
+            style={NO_SEL}
+          >
+            {bw}→{n}
+          </text>
+        </RectShape>
       );
     },
   },
@@ -647,98 +565,27 @@ export const busGates: Record<string, GateDef> = {
     label: 'Séparateur',
     category: 'Bus',
     w: 80,
-    h: 124,
+    h: 120,
     inputs: [],
     outputs: [],
     // width = largeur du bus d'entrée ; produit `width` sorties 1-bit.
-    // b0 = bit de poids faible (LSB), affiché en bas ; MSB en haut (extérieur).
+    // MSB en premier (en haut, ou à gauche si les sorties sont en bas/haut). Dessin fixe.
+    fixedDisplay: true,
     defaultState: { width: 4 },
     getDynamicGeometry: (comp) => {
-      const n = comp?.state?.width ?? 4;
-      const h = Math.max(76, n * 24 + 28);
-      const outputs = [];
-      for (let i = 0; i < n; i++) {
-        const bit = n - 1 - i; // haut = MSB
-        outputs.push({ name: `b${bit}`, x: 80, y: 22 + i * 24, width: 1 });
-      }
-      return {
-        w: 80,
-        h,
-        inputs: [{ name: 'in', x: 0, y: h / 2, width: n }],
-        outputs,
-      };
+      const L = splitterLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, _o, inputValue, _ibn, angle) => {
+    shape: (comp, _o, inputValue) => {
       const n = comp?.state?.width ?? 4;
-      const W = 80;
-      const h = Math.max(76, n * 24 + 28);
+      const L = splitterLayout(comp);
       const busVal = maskTo(n, asInt(inputValue));
-      const accent = 'var(--lcd-text, #fbbf24)';
-      const stubs = [];
-      const labels = [];
-      for (let i = 0; i < n; i++) {
-        const bit = n - 1 - i;
-        const y = 22 + i * 24;
-        const on = (busVal >> bit) & 1;
-        stubs.push(<line key={`ol${i}`} x1={W - 14} y1={y} x2={W} y2={y} strokeWidth="1.2" />);
-        stubs.push(
-          <circle
-            key={`op${i}`}
-            cx={W}
-            cy={y}
-            r="3"
-            fill={on ? accent : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />,
-        );
-        labels.push({ bit, y, on });
-      }
       return (
-        <>
-          {stubs}
-          <line x1="0" y1={h / 2} x2="14" y2={h / 2} strokeWidth="1.2" />
-          <circle cx="2.5" cy={h / 2} r="2.5" fill="white" strokeWidth="1.2" />
-          <rect
-            x="14"
-            y="10"
-            width={W - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          <g stroke="none">
-            {labels.map(({ bit, y, on }) => (
-              <UprightText
-                angle={angle}
-                key={`ot${bit}`}
-                x={W - 20}
-                y={y + 4}
-                fontSize="12"
-                textAnchor="end"
-                fontWeight={on ? '700' : '600'}
-                fontFamily="'IBM Plex Mono', monospace"
-                fill={on ? '#1f2937' : '#475569'}
-                style={{ userSelect: 'none', pointerEvents: 'none' }}
-              >
-                {bit}
-              </UprightText>
-            ))}
-            <UprightText
-              angle={angle}
-              x="20"
-              y={h / 2 + 1}
-              fontSize="11"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              in
-            </UprightText>
-          </g>
-        </>
+        <RectShape layout={L}>
+          {L.ports
+            .filter((p) => p.name !== 'in' && (busVal >> Number(p.name.slice(1))) & 1)
+            .map((p) => labelHighlight(p, `hl${p.name}`))}
+        </RectShape>
       );
     },
   },
@@ -746,104 +593,25 @@ export const busGates: Record<string, GateDef> = {
     label: 'Fusionneur',
     category: 'Bus',
     w: 80,
-    h: 124,
+    h: 120,
     inputs: [],
     outputs: [],
     // width = largeur du bus de sortie ; agrège `width` entrées 1-bit.
-    // b0 = LSB (en bas), MSB en haut (extérieur).
+    // MSB en premier (en haut, ou à gauche). Dessin fixe.
+    fixedDisplay: true,
     defaultState: { width: 4 },
     getDynamicGeometry: (comp) => {
-      const n = comp?.state?.width ?? 4;
-      const h = Math.max(76, n * 24 + 28);
-      const inputs = [];
-      for (let i = 0; i < n; i++) {
-        const bit = n - 1 - i;
-        inputs.push({ name: `b${bit}`, x: 0, y: 22 + i * 24, width: 1 });
-      }
-      return {
-        w: 80,
-        h,
-        inputs,
-        outputs: [{ name: 'out', x: 80, y: h / 2, width: n }],
-      };
+      const L = mergerLayout(comp);
+      return { w: L.w, h: L.h, inputs: L.inputs, outputs: L.outputs };
     },
-    shape: (comp, outputValue, _i, inputsByName, angle) => {
-      const n = comp?.state?.width ?? 4;
-      const W = 80;
-      const h = Math.max(76, n * 24 + 28);
-      const outVal = maskTo(n, asInt(outputValue));
-      const accent = 'var(--lcd-text, #fbbf24)';
-      const stubs = [];
-      const labels = [];
-      for (let i = 0; i < n; i++) {
-        const bit = n - 1 - i;
-        const y = 22 + i * 24;
-        const on = asInt(inputsByName?.[`b${bit}`] ?? 0) & 1;
-        stubs.push(<line key={`il${i}`} x1="0" y1={y} x2="14" y2={y} strokeWidth="1.2" />);
-        stubs.push(
-          <circle
-            key={`ic${i}`}
-            cx="2.5"
-            cy={y}
-            r="2.5"
-            fill={on ? accent : 'white'}
-            strokeWidth="1.2"
-          />,
-        );
-        labels.push({ bit, y, on });
-      }
+    shape: (comp, _o, _i, inputsByName) => {
+      const L = mergerLayout(comp);
       return (
-        <>
-          {stubs}
-          <line x1={W - 14} y1={h / 2} x2={W} y2={h / 2} strokeWidth="1.2" />
-          <circle
-            cx={W}
-            cy={h / 2}
-            r="3"
-            fill={outVal ? accent : '#1f2937'}
-            stroke="#1f2937"
-            strokeWidth="1"
-          />
-          <rect
-            x="14"
-            y="10"
-            width={W - 28}
-            height={h - 20}
-            fill="white"
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          <g stroke="none">
-            {labels.map(({ bit, y, on }) => (
-              <UprightText
-                angle={angle}
-                key={`it${bit}`}
-                x="20"
-                y={y + 4}
-                fontSize="12"
-                fontWeight={on ? '700' : '600'}
-                fontFamily="'IBM Plex Mono', monospace"
-                fill={on ? '#1f2937' : '#475569'}
-                style={{ userSelect: 'none', pointerEvents: 'none' }}
-              >
-                {bit}
-              </UprightText>
-            ))}
-            <UprightText
-              angle={angle}
-              x={W - 20}
-              y={h / 2 + 1}
-              textAnchor="end"
-              fontSize="11"
-              fontWeight="700"
-              fontFamily="'IBM Plex Mono', monospace"
-              fill="#1f2937"
-              style={{ userSelect: 'none', pointerEvents: 'none' }}
-            >
-              out
-            </UprightText>
-          </g>
-        </>
+        <RectShape layout={L}>
+          {L.ports
+            .filter((p) => p.name !== 'out' && asInt(inputsByName?.[p.name] ?? 0) & 1)
+            .map((p) => labelHighlight(p, `hl${p.name}`))}
+        </RectShape>
       );
     },
   },
