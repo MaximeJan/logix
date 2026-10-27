@@ -105,19 +105,23 @@ export function PropertiesPanel({ circuit, selection, onUpdate, sim }: Propertie
           </p>
         </div>
 
-        {(comp.type === 'INPUT' || comp.type === 'OUTPUT') && (
-          <div>
-            <label className="text-stone-500 block mb-1">Étiquette</label>
-            <input
-              type="text"
-              value={comp.label ?? ''}
-              onChange={(e) => onUpdate(id, { label: e.target.value })}
-              maxLength={6}
-              className="w-full px-2 py-1 border border-stone-300 rounded font-mono text-sm"
-              placeholder={comp.type === 'INPUT' ? 'A' : 'S'}
-            />
-          </div>
-        )}
+        {/* Nom affiché sur le canevas : tous les composants sont nommables. Pour
+            une Entrée/Sortie, c'est aussi l'étiquette qu'apparie la vérification. */}
+        <div>
+          <label className="text-stone-500 block mb-1">
+            {comp.type === 'INPUT' || comp.type === 'OUTPUT' ? 'Étiquette' : 'Nom'}
+          </label>
+          <input
+            type="text"
+            value={comp.label ?? ''}
+            onChange={(e) => onUpdate(id, { label: e.target.value })}
+            maxLength={comp.type === 'INPUT' || comp.type === 'OUTPUT' ? 6 : 24}
+            className="w-full px-2 py-1 border border-stone-300 rounded font-mono text-sm"
+            placeholder={
+              comp.type === 'INPUT' ? 'A' : comp.type === 'OUTPUT' ? 'S' : 'ex. ALU, registre A'
+            }
+          />
+        </div>
 
         {isSeg7 && (
           <div className="pt-2 border-t border-stone-200 space-y-2">

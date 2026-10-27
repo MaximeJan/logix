@@ -380,6 +380,23 @@ export function CircuitCanvas({
                   </text>
                 );
               })()}
+            {/* Nom donné par l'élève à un composant (hors Entrée/Sortie, dont
+                l'étiquette est posée à côté du port ci-dessus) : centré au-dessus. */}
+            {comp.type !== 'INPUT' && comp.type !== 'OUTPUT' && comp.label && (
+              <text
+                x={def.w / 2}
+                y={-8}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight="600"
+                fontFamily="'IBM Plex Mono', monospace"
+                fill="#475569"
+                stroke="none"
+                style={{ userSelect: 'none', pointerEvents: 'none' }}
+              >
+                {comp.label}
+              </text>
+            )}
             {/* Composant custom interactif : cellules d'entrée cliquables (valeur
                 depuis state.inValues) + valeurs de sortie (depuis la simulation). */}
             {def.interactive &&
