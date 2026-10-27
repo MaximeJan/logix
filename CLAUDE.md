@@ -287,6 +287,8 @@ Voir `ROADMAP.md` pour le détail. Très brièvement :
 
 ## Pièges connus
 
+- **Tous les composants sont nommables** : `comp.label` (champ « Nom » de Propriétés, « Étiquette » pour une Entrée/Sortie), déjà sérialisé par `persist`. Le canevas l'affiche centré au-dessus du composant, sauf pour Entrée/Sortie (à côté, du côté opposé au port) dont l'étiquette sert aussi à l'appariement de la vérification d'exercice.
+
 - **`getDef(type, customDefs)` sans comp** renvoie la def avec le `defaultState`. OK pour les aperçus, **pas** pour la simulation/le rendu d'un composant réel. Toujours passer `comp` quand disponible.
 - **Les fils orphelins** après changement de largeur sont nettoyés par `updateComponent` via le flag `_dropMismatchedWires: true` dans le patch. Si tu ajoutes un composant à géométrie variable, pense à ce flag dans son sélecteur de largeur.
 - **L'éditeur de composant custom** entre en `editMode` et travaille sur un circuit séparé ; au commit il reconstruit la définition. Le banner ambré indique le mode édition. L'autosave est suspendu pendant l'édition.

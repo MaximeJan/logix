@@ -396,8 +396,8 @@ export const busGates: Record<string, GateDef> = {
             </UprightText>
             <UprightText
               angle={angle}
-              x={w / 2 + 4}
-              y={h - (vertical ? 24 : 19)}
+              x={w / 2 + (vertical ? -8 : 4)}
+              y={h - (vertical ? 22 : 19)}
               textAnchor="middle"
               fontSize="9"
               fontWeight="700"
@@ -493,7 +493,7 @@ export const busGates: Record<string, GateDef> = {
             ))}
             <UprightText
               angle={angle}
-              x={w / 2 - 6}
+              x={w / 2 + (vertical ? 8 : -6)}
               y={h / 2 + 4}
               textAnchor="middle"
               fontSize="11"
@@ -506,8 +506,8 @@ export const busGates: Record<string, GateDef> = {
             </UprightText>
             <UprightText
               angle={angle}
-              x={w / 2 + (vertical ? 6 : -4)}
-              y={h - (vertical ? 24 : 19)}
+              x={w / 2 + (vertical ? -8 : -4)}
+              y={h - (vertical ? 22 : 19)}
               textAnchor="middle"
               fontSize="9"
               fontWeight="700"
